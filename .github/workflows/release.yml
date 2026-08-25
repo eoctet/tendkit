@@ -1,22 +1,85 @@
-name: release-smoke
+name: release
 
 on:
   push:
-    tags: ['v*']
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 concurrency:
-  group: release-smoke-${{ github.ref }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
 jobs:
-  smoke:
+  release:
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v7
+      - name: Check out the signed tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - run: go build -o tendkit ./cmd/tendkit
-      - run: go test ./cmd/tendkit -run 'TestTUI' -count=1
+
+      - name: Fetch the protected main branch
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Validate signed release authorization
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/validate-release-tag.sh "${GITHUB_REF_NAME}"
+
+      - name: Test release source
+        run: go test ./... -count=1
+
+      - name: Build Draft Release
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Verify local release assets
+        run: scripts/verify-release-snapshot.sh dist
+
+      - name: Attest archives and checksums
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+
+      - name: Verify Draft assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          release_json="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")"
+          test "$(jq -r '.draft' <<<"${release_json}")" = true
+
+          expected_assets="$(printf '%s\n' \
+            "tendkit_${RELEASE_VERSION}_darwin_arm64.tar.gz" \
+            "tendkit_${RELEASE_VERSION}_darwin_x86_64.tar.gz" \
+            "tendkit_${RELEASE_VERSION}_linux_arm64.tar.gz" \
+            "tendkit_${RELEASE_VERSION}_linux_x86_64.tar.gz" \
+            checksums.txt | sort)"
+          actual_assets="$(jq -r '.assets[].name' <<<"${release_json}" | sort)"
+          test "${actual_assets}" = "${expected_assets}"
+
+          release_id="$(jq -er '.id' <<<"${release_json}")"
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            -F draft=false \
+            -F prerelease="${RELEASE_PRERELEASE}" >/dev/null

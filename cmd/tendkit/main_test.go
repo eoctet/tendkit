@@ -18,6 +18,18 @@ import (
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 )
 
+func TestBuildMetadataDefaults(t *testing.T) {
+	if programVersion != "dev" {
+		t.Fatalf("programVersion = %q, want dev", programVersion)
+	}
+	if commitSHA != "unknown" {
+		t.Fatalf("commitSHA = %q, want unknown", commitSHA)
+	}
+	if buildDate != "unknown" {
+		t.Fatalf("buildDate = %q, want unknown", buildDate)
+	}
+}
+
 func saveCommandTestConfig(t *testing.T, center *config.Center, catalog model.Config) {
 	t.Helper()
 	if err := center.Initialize(); err != nil {

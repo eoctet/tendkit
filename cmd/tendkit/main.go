@@ -17,7 +17,11 @@ import (
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 )
 
-const programVersion = "0.1.0"
+var (
+	programVersion = "dev"
+	commitSHA      = "unknown"
+	buildDate      = "unknown"
+)
 
 type tuiRunner func(context.Context, *service.Service, ui.Mode) error
 

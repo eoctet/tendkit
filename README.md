@@ -14,7 +14,7 @@ TendKit brings them into one terminal dashboard. Scan your machine, see what is 
 
 TendKit runs locally on macOS and Linux. It does not replace your package managers, and it never turns updates into an unchecked batch command.
 
-> TendKit is currently at version `0.1.0` and is pre-release software.
+> TendKit is pre-release software. Check the [latest release](https://github.com/eoctet/tendkit/releases/latest) for the current version.
 
 ## ✨ Why TendKit?
 
@@ -44,6 +44,21 @@ Supported sources include GitHub Releases and tags, npm, PyPI, uv, JetBrains, Go
 - `aria2c` or `curl` only when downloading artifacts
 
 Windows is not supported yet. Supported Linux distributions are Ubuntu, Debian, CentOS, and Red Hat Enterprise Linux.
+
+### 📦 Install a release
+
+Download the archive for your platform and `checksums.txt` from the
+[latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest), then verify its SHA-256 checksum before
+placing `tendkit` on your `PATH`.
+
+Go users can build and install a specific tagged version directly:
+
+```bash
+go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
+```
+
+Replace `VERSION` with a tag such as `v0.1.0-rc.1`. GitHub Release archives carry the injected release version;
+direct `go install` builds use the source-build metadata.
 
 ### 🛠️ Build and run
 

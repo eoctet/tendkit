@@ -14,7 +14,7 @@ TendKit 把它们集中到一个终端面板中。扫描本机、查看安装状
 
 TendKit 在 macOS 和 Linux 本地运行。它不会替代现有包管理器，也不会把更新变成不受控制的批量命令。
 
-> TendKit 当前版本为 `0.1.0`，仍处于预发布阶段。
+> TendKit 仍处于预发布阶段。当前版本请查看 [Latest Release](https://github.com/eoctet/tendkit/releases/latest)。
 
 ## ✨ 为什么选择 TendKit？
 
@@ -44,6 +44,20 @@ TendKit 在 macOS 和 Linux 本地运行。它不会替代现有包管理器，�
 - `aria2c` 或 `curl`：仅下载制品时需要
 
 暂不支持 Windows。支持的 Linux 发行版为 Ubuntu、Debian、CentOS 和 Red Hat Enterprise Linux。
+
+### 📦 安装发布版本
+
+从 [Latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest) 下载当前平台的归档和
+`checksums.txt`，验证 SHA-256 校验和后，再把 `tendkit` 放入 `PATH`。
+
+Go 用户也可以直接构建并安装指定标签：
+
+```bash
+go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
+```
+
+将 `VERSION` 替换为 `v0.1.0-rc.1` 等标签。GitHub Release 归档包含注入的发布版本；直接
+`go install` 使用源码构建元数据。
 
 ### 🛠️ 构建并运行
 
