@@ -49,7 +49,7 @@ body:
     id: problem
     attributes:
       label: What happened?
-      description: Describe the observed behavior and any visible error. Do not include secrets or unredacted private paths.
+      description: Describe the observed behavior and any visible error. Do not include credentials, tokens, cryptographic keys, or unredacted private paths.
     validations:
       required: true
 
@@ -89,7 +89,7 @@ body:
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true
-        - label: I removed secrets and sensitive personal or system information.
+        - label: I removed credentials, tokens, cryptographic keys, and sensitive personal or system information.
           required: true
         - label: This report does not describe an undisclosed security vulnerability.
           required: true

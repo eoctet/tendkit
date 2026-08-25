@@ -57,5 +57,5 @@ body:
       options:
         - label: I searched existing issues and did not find the same request.
           required: true
-        - label: I reviewed the README and relevant product or architecture documentation.
+        - label: I reviewed the README and relevant public product documentation.
           required: true

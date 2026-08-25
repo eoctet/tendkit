@@ -31,7 +31,7 @@ Include as much of the following as is safe and available:
 - whether the issue has been disclosed elsewhere;
 - a safe way to contact you for follow-up.
 
-Do not include real credentials, personal data, production configuration, or secrets. Use synthetic data and redact logs, paths, environment variables, and command output.
+Do not include real credentials, tokens, cryptographic keys, personal data, or production configuration. Use synthetic data and redact logs, paths, environment variables, and command output.
 
 ## What to expect
 
@@ -50,7 +50,7 @@ After assessment, the maintainers will tell the reporter whether the issue is ac
 Security reports may include, but are not limited to:
 
 - command or argument injection through configuration, templates, provider data, or discovered metadata;
-- unsafe propagation or logging of secrets and environment variables;
+- unsafe propagation or logging of credentials, tokens, cryptographic keys, or environment variables;
 - insecure configuration ownership, permissions, locking, or atomic persistence behavior;
 - download source confusion, path traversal, unsafe asset selection, or integrity-verification bypass;
 - cancellation or process-group failures that leave privileged or destructive child processes running;

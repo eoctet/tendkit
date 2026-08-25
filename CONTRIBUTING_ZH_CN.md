@@ -8,8 +8,8 @@
 
 - 提交前搜索已有 Issue 和 Pull Request，避免重复。
 - 使用 Issue Form 报告 Bug 或功能建议，并只提供适合公开的信息。
-- 不要在公开 Issue 中披露漏洞、凭据、令牌、私人路径或未经脱敏的日志。安全问题请遵循 [`SECURITY_ZH_CN.md`](SECURITY_ZH_CN.md)。
-- 实质性功能、公开接口、配置/schema、迁移或安全边界变更，应先创建 Issue 并确认范围。
+- 不要在公开 Issue 中披露漏洞、凭据、令牌、加密密钥、私有路径或未经脱敏的日志。安全问题请遵循 [`SECURITY_ZH_CN.md`](SECURITY_ZH_CN.md)。
+- 实质性功能、公开接口或配置/schema 变更、迁移、安全边界变更或跨组件设计，应先创建 Issue，并与维护者确认范围后再开始实现。
 - 每个贡献只处理一个问题；无关清理应单独提出。
 
 文档、测试或明确局部行为的小修正通常可以直接提交。变更影响长期产品或架构契约时，维护者可能要求先创建 Issue。
@@ -21,7 +21,7 @@
 - Git
 - Go 1.23 或更高版本；使用 [`go.mod`](go.mod) 声明的工具链
 - Python 3，用于仓库 JSON 检查
-- macOS，用于覆盖完整平台与 PTY 测试；Linux 支持非 macOS 实现与测试
+- macOS 或受支持的 Linux 环境；macOS 覆盖完整的平台、Application Bundle 和 PTY 测试面，Linux 支持非 macOS 实现与测试
 
 [`scripts/verify-go-quality.sh`](scripts/verify-go-quality.sh) 列出了可选质量工具及固定版本：`staticcheck`、`govulncheck` 和 `gosec`。缺失时脚本会显示安装命令，但不会自动安装或升级工具。
 
@@ -36,12 +36,12 @@ go build ./...
 
 ## 项目契约与目录
 
-修改行为前阅读相关文档：
+修改行为前使用以下来源：
 
-- [`README.md`](README.md) 与 [`docs/architecture/`](docs/architecture/) 定义长期产品、功能、架构、开发和技术栈契约。
+- [`README_ZH_CN.md`](README_ZH_CN.md) 与公开的[产品使用手册](wiki/user-manual_ZH_CN.md)定义面向用户的产品行为与边界。
+- 本文定义贡献流程；公开的[开发与技术规范](wiki/development-and-technical-guide_ZH_CN.md)定义详细工程与技术标准。
 - [`internal/config/template/default_config.json`](internal/config/template/default_config.json)、严格解析和测试定义配置契约。
 - 可执行代码与测试代表当前实现。
-- [`docs/changes/`](docs/changes/) 记录有界的实质性变更和已验收的历史决定。
 
 主要包职责：
 
@@ -61,7 +61,7 @@ go build ./...
 1. 复现问题或明确验收条件。
 2. 行为变更先添加能因目标原因失败的聚焦测试。
 3. 以最小改动满足验收条件，避免推测性配置、依赖和抽象。
-4. 同步更新受影响的用户、架构、配置和翻译文档。
+4. 同步更新受影响的公开用户或贡献者文档、配置示例和两个语言版本。
 5. 先运行聚焦测试，再按风险扩大验证范围。
 
 Go 代码必须使用 `gofmt` 格式化。遵循现有包边界和错误词汇。新 Provider 只实现真实支持的能力；新扫描域必须保留取消、不完整清单保护、identity、排除和合并语义。配置与命令执行属于安全敏感区域，需要聚焦的负向测试。
@@ -92,9 +92,11 @@ scripts/verify-go-quality.sh
 
 完整检查包括格式校验、单元与集成测试、竞态检测、`go vet`、构建、静态分析、漏洞与安全扫描、JSON 校验和 Git 空白检查。若平台或工具导致检查无法运行，请在 Pull Request 中记录准确命令、失败、环境和未覆盖风险；未运行的检查不得表述为通过。
 
+仓库自动化分为三层。[Test](.github/workflows/test.yml) 对 Pull Request 和 `main` push 运行聚焦与全量测试、TUI 竞态检查、`go vet`、构建和发布快照；[Nightly](.github/workflows/nightly.yml) 增加全量竞态检测及重复 PTY/TUI 平台测试；[Release](.github/workflows/release.yml) 只接受属于 `main`、关联 Pull Request 检查通过且带 `v` 前缀的签名 annotated SemVer tag，并在发布前创建和验证 Draft Release。这些 workflow 不能替代 Pull Request 所需的聚焦本地验证证据。
+
 ## Commit 与 Pull Request
 
-Commit 应清晰并使用祈使语气。推荐使用 Conventional Commits 前缀，Pull Request 标题应使用：
+Commit 标题应清晰并使用祈使语气。Commit 标题推荐使用 Conventional Commits 前缀，Pull Request 标题应使用该格式：
 
 ```text
 <type>[optional scope]: <description>
@@ -106,13 +108,13 @@ Pull Request 应当：
 
 - 说明问题、范围、方案和重要权衡；
 - 适用时使用 `Closes #123` 关联 Issue；
-- 列出准确验证命令与结果；
-- 为行为变更补充测试，为用户可见变更补充文档；
+- 列出准确的验证命令和结果；
+- 为行为变更补充测试，为用户可见变更补充中英文文档；
 - 指出平台特有、未测试行为和剩余风险；
-- 避免生成文件、本地配置、日志、秘密和无关格式调整；
+- 避免生成文件、构建产物、本地配置、日志、凭据、令牌、加密密钥和无关格式调整；
 - 可视 TUI 变更在有帮助时提供截图或短录屏。
 
-欢迎用 Draft Pull Request 提前讨论设计。当范围稳定、相关检查通过且描述包含足以复现和评估的证据时，再标记为可审查。
+欢迎用 Draft Pull Request 提前讨论设计。当范围稳定、相关检查通过且描述包含足以复现和评估的证据时，Pull Request 才适合进入最终审查。
 
 ## 审查与验收
 

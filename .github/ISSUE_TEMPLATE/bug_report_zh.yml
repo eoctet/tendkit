@@ -49,7 +49,7 @@ body:
     id: problem
     attributes:
       label: 发生了什么？
-      description: 描述实际行为和可见错误。不要包含秘密或未经脱敏的私人路径。
+      description: 描述实际行为和可见错误。不要包含凭据、令牌、加密密钥或未经脱敏的私有路径。
     validations:
       required: true
 
@@ -89,7 +89,7 @@ body:
       options:
         - label: 我已搜索已有 Issue，未发现重复问题。
           required: true
-        - label: 我已删除秘密和敏感的个人或系统信息。
+        - label: 我已删除凭据、令牌、加密密钥和敏感的个人或系统信息。
           required: true
         - label: 本报告不涉及尚未公开的安全漏洞。
           required: true

@@ -66,5 +66,5 @@ body:
       options:
         - label: I reran the focused command and recorded whether it failed again.
           required: true
-        - label: I removed secrets and sensitive personal or system information.
+        - label: I removed credentials, tokens, cryptographic keys, and sensitive personal or system information.
           required: true

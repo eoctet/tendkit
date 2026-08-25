@@ -46,8 +46,8 @@ Commands and results:
 
 - [ ] The change is focused and contains no unrelated cleanup.
 - [ ] Behavior changes have relevant tests.
-- [ ] User-visible or contract changes have relevant documentation and translations.
-- [ ] Logs, examples, and fixtures contain no secrets or private data.
+- [ ] User-visible changes have relevant English and Simplified Chinese documentation; other contract changes have relevant documentation.
+- [ ] Logs, examples, and fixtures contain no credentials, tokens, cryptographic keys, private paths, or unredacted personal or system information.
 - [ ] Remaining untested behavior and risks are described above.
 
-<!-- Preferred title: <type>[optional scope]: <description> -->
+<!-- Expected title: <type>[optional scope]: <description> -->

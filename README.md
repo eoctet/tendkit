@@ -4,94 +4,70 @@
   <img src="assets/tendkit-logo.png" alt="TendKit logo" width="720">
 </p>
 
-> See every tool. Spot every update. Stay in control.
+> Manage your developer tools in one place. Spot updates early. Stay in control.
 
 [English](README.md) | [简体中文](README_ZH_CN.md)
 
-Your development tools are everywhere: shell paths, language package managers, and application folders. Keeping track of them is tedious.
+Developer tools are scattered across `PATH`, package managers, and application folders. You may have lost track of what is installed, what needs attention, and what needs an update.
 
-TendKit brings them into one terminal dashboard. Scan your machine, see what is installed, check for new versions, and update only the tools you choose.
+TendKit brings them together in one terminal dashboard. Scan your machine, view installation status, check for new versions, and update only the tools you need.
 
-TendKit runs locally on macOS and Linux. It does not replace your package managers, and it never turns updates into an unchecked batch command.
+TendKit runs locally on macOS and Linux. Its purpose is not to replace your existing package managers, but to give you a simpler way to manage your current development environment.
 
-> TendKit is pre-release software. Check the [latest release](https://github.com/eoctet/tendkit/releases/latest) for the current version.
+<p align="center">
+  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="720">
+</p>
 
 ## ✨ Why TendKit?
 
-| | What you get |
+|     | What you get |
 | --- | --- |
-| 🧰 | **One clear inventory** — See CLIs, global packages, and macOS developer apps in one place. |
-| 🔎 | **Less manual checking** — Compare installed and latest versions without remembering a different command for every tool. |
+| 🧰 | **One clear inventory** — View CLIs, global packages, and macOS developer apps in one place. |
+| 🔎 | **Less repetitive checking** — No need to remember every tool's command; TendKit discovers and manages them for you. |
 | 🎛️ | **Your choice, every time** — Check only, update automatically, or download an artifact for later. |
-| ✅ | **Review before changing** — Accept or reject newly found tools and scan changes. |
-| 🛡️ | **Built for real workstations** — Duplicate detection, cancellation, safe configuration writes, and structured logs are included. |
-| 🌐 | **English and Chinese** — Switch the interface language at startup or in settings. |
+| ✅ | **Review before changing** — Accept or reject newly discovered tools and scan changes. |
+| 🛡️ | **Production-ready** — Built-in duplicate detection, task handling, safe configuration writes, and audit logs. |
+| 📝 | **Configuration-first** — Everything is configuration, so you can add whatever you need. |
+
+TendKit continues to use your existing package managers and update methods. It gives you one place to view and act, but it does not replace those tools.
+
+## 🎯 Use cases
+
+| Situation | How TendKit helps |
+| --- | --- |
+| **Setting up or auditing a workstation** | Scan once to build a reviewable inventory instead of checking each development environment by hand. |
+| **Routine maintenance** | Check all managed tools at once and focus only on items that actually have a new version. |
+| **Protecting a stable environment** | Review results one by one and update only selected tools instead of running a blind batch upgrade. |
+| **Mixed installation sources** | View PATH tools, global npm/Python/Go/uv/Ruby packages, and macOS apps in one place. |
 
 ## 🧭 How it works
 
-1. 🔍 **Scan** — TendKit finds supported tools from `PATH`, global package ecosystems, and macOS application folders.
-2. 👀 **Review** — You decide which discoveries and configuration changes to keep.
-3. 🚀 **Check or update** — TendKit uses the right provider for each tool and shows the result in the TUI.
-
-Supported sources include GitHub Releases and tags, npm, PyPI, uv, JetBrains, Go, Node.js, Sparkle feeds, and custom commands.
+1. **Scan** — Find supported developer tools on the machine.
+2. **Review** — Choose which discoveries to add, edit, or exclude.
+3. **Check** — Compare installed and latest versions in one view.
+4. **Act** — Run the configured update method or download an artifact for later.
 
 ## 🚀 Quick start
 
-### ✅ Requirements
+### 📦 Install TendKit
 
-- macOS or Linux on `arm64` or `x86_64`
-- Go 1.23 or later; see [`go.mod`](go.mod) for the exact development toolchain
-- `aria2c` or `curl` only when downloading artifacts
+Download the package for your operating system from the [latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest). Extract it and place `tendkit` on your `PATH`.
 
-Windows is not supported yet. Supported Linux distributions are Ubuntu, Debian, CentOS, and Red Hat Enterprise Linux.
+Supported environments:
 
-### 📦 Install a release
+- macOS or Linux
+- `arm64` or `x86_64`
+- Ubuntu, Debian, CentOS, and Red Hat Enterprise Linux
 
-Download the archive for your platform and `checksums.txt` from the
-[latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest), then verify its SHA-256 checksum before
-placing `tendkit` on your `PATH`.
+Windows is not supported yet. Artifact downloads support `curl` or `aria2c` (install separately).
 
-Go users can build and install a specific tagged version directly:
+Go users can also install the binary directly:
 
 ```bash
 go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
 ```
 
-Replace `VERSION` with a tag such as `v0.1.0-rc.1`. GitHub Release archives carry the injected release version;
-direct `go install` builds use the source-build metadata.
-
-### 🛠️ Build and run
-
-```bash
-git clone https://github.com/eoctet/tendkit.git
-cd tendkit
-mkdir -p bin
-go build -o ./bin/tendkit ./cmd/tendkit
-tendkit_bin="$(pwd)/bin/tendkit"
-
-mkdir -p /tmp/tendkit-demo
-cd /tmp/tendkit-demo
-"$tendkit_bin" --no-env-file
-```
-
-TendKit opens the terminal interface and creates `conf/config.json` in the directory where it starts. It never overwrites an existing configuration file. Using a temporary directory for the first run keeps the trial separate from your normal workspace.
-
-## ⌨️ Everyday use
-
-| Key | Action |
-| --- | --- |
-| `↑` / `↓` | Select a tool |
-| `ENTER` | Open details or confirm an action |
-| `SPACE` | Enable or disable the selected tool |
-| `C` / `A` | Check one tool / check all |
-| `U` / `CTRL+U` | Update one tool / update all |
-| `F` | Search |
-| `S` / `CTRL+S` | Open settings / scan management |
-| `L` | View logs |
-| `ESC` | Go back or cancel |
-| `Q` | Quit |
-
-Letter shortcuts are case-sensitive.
+> Replace `VERSION` with a tag such as `v0.1.0-rc.1`.
 
 ### 🧩 Command-line options
 
@@ -107,35 +83,49 @@ tendkit version [options]
 --no-env-file    do not load .env from the launch directory
 ```
 
-Scanning, version checks, downloads, updates, and settings are handled inside the TUI.
+The TUI creates `conf/config.json` when it starts and never overwrites existing configuration. Scanning, version checks, downloads, updates, and settings are all handled inside the TUI.
 
-## 🛡️ Safety by default
+## 🔍 What TendKit can find
 
-TendKit keeps you in control:
+TendKit can scan and identify:
 
-- It runs commands with your current user permissions and never adds `sudo`.
-- It validates configuration before running commands or saving changes.
-- It locks the active configuration and writes updates atomically.
-- It can verify downloaded artifacts with SHA-256 when a trusted checksum is available.
-- It supports cancellation and stops child process groups.
-- It keeps runtime logs in `logs/run.log` and limits retained log files.
+- supported developer CLIs available on `PATH`;
+- global packages managed by npm, Python, Go, uv, and Ruby;
+- developer applications in `/Applications` and `~/Applications` on macOS.
 
-Custom provider actions are shell commands. Review them like code, and never place credentials or tokens in configuration or logs. Read the [user manual](docs/product/user-manual.md) for the full operating and security model.
+It can check versions through GitHub Releases and tags, npm, PyPI, uv, JetBrains, Go, Node.js, Sparkle feeds, and custom commands. Available capabilities depend on the information exposed by each tool or package manager. Project-local dependencies and virtual environments are not currently scanned.
+
+## 🛡️ Safety and control
+
+- Runs with your current user permissions and never adds `sudo`.
+- Requires review for newly discovered tools and scan changes.
+- Updates, downloads, or installs only when you start the action.
+- Validates configuration before saving and writes it atomically.
+- Verifies downloaded artifacts with SHA-256 when a trusted checksum is available.
+- Preserves the package installation's existing permission model.
+- Redacts credentials, tokens, cryptographic keys, and other sensitive information.
+
+Custom provider actions are shell commands. Review them like code, and never place credentials, tokens, or cryptographic keys in configuration or logs. See the [user manual](wiki/user-manual.md) for configuration examples and the complete operating and security model.
+
+## 🛠️ Build from source
+
+Building requires Go 1.23 or later; see [`go.mod`](go.mod) for the exact development toolchain.
+
+```bash
+git clone https://github.com/eoctet/tendkit.git
+cd tendkit
+go build -o ./bin/tendkit ./cmd/tendkit
+./bin/tendkit
+```
 
 ## 📚 Documentation
 
-- [User manual](docs/product/user-manual.md)
-- [Features and product boundaries](docs/architecture/features.md)
-- [Architecture](docs/architecture/architecture.md)
-- [Development guide](docs/architecture/development.md)
-- [Technology stack](docs/architecture/technology-stack.md)
-- [TUI interaction design](docs/product/tui-interaction-design.md)
-
-The detailed product and architecture documents are currently maintained in Simplified Chinese.
+- [User manual](wiki/user-manual.md) · [简体中文](wiki/user-manual_ZH_CN.md)
+- [Development and technical guide](wiki/development-and-technical-guide.md) · [简体中文](wiki/development-and-technical-guide_ZH_CN.md)
 
 ## 💬 Feedback and contributing
 
-Found a bug or have an idea? Use the bilingual Issue Forms in this repository. Search existing issues first and remove secrets or private information from logs and screenshots.
+Found a bug or have an idea? Use the bilingual Issue Forms in this repository. Search existing issues first, and do not include credentials, tokens, cryptographic keys, private paths, or unredacted personal or system information.
 
 Want to contribute code or documentation? Start with [CONTRIBUTING.md](CONTRIBUTING.md). Keep changes focused, add relevant tests, and explain how you verified the result.
 

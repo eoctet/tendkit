@@ -4,93 +4,70 @@
   <img src="assets/tendkit-logo.png" alt="TendKit Logo" width="720">
 </p>
 
-> 看清所有工具，及时发现更新，一切由你掌控。
+> 在一个地方管理你的开发工具，及时发现更新，一切由你掌控。
 
 [English](README.md) | [简体中文](README_ZH_CN.md)
 
-开发工具散落在 `PATH`、语言包管理器和应用目录中。想知道安装了什么、哪些需要更新，往往要执行一堆不同的命令。
+开发工具散落在 `PATH`、包管理器和应用目录中。想知道安装了什么、哪些需要处理和及时更新，可能你已经忘记了。
 
-TendKit 把它们集中到一个终端面板中。扫描本机、查看安装状态、检查新版本，只更新你选择的工具。
+TendKit 把它们集中到一个终端面板中。扫描本机、查看安装状态、检查新版本，只更新你需要的工具。
 
-TendKit 在 macOS 和 Linux 本地运行。它不会替代现有包管理器，也不会把更新变成不受控制的批量命令。
+TendKit 在 macOS 和 Linux 本地运行。它的目的不是替代现有包管理器，而是提供更简单的方式让你管理现有开发环境。
 
-> TendKit 仍处于预发布阶段。当前版本请查看 [Latest Release](https://github.com/eoctet/tendkit/releases/latest)。
+<p align="center">
+  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="720">
+</p>
 
 ## ✨ 为什么选择 TendKit？
 
-| | 你可以获得什么 |
-| --- | --- |
-| 🧰 | **一份清晰的工具清单** — 在同一个界面查看 CLI、全局包和 macOS 开发应用。 |
-| 🔎 | **少做重复检查** — 不必记住每个工具的版本命令，也能比较当前版本和最新版本。 |
-| 🎛️ | **每次都由你决定** — 只检查、自动更新，或者先下载制品稍后处理。 |
-| ✅ | **变更先审核** — 新发现的工具和扫描变更都可以接受或拒绝。 |
-| 🛡️ | **适合真实开发机** — 内置重复识别、任务取消、安全配置写回和结构化日志。 |
-| 🌐 | **支持中英文** — 可在启动时或设置中切换界面语言。 |
+|     | 你可以获得什么                                                           |
+| --- | ------------------------------------------------------------------------ |
+| 🧰   | **一份清晰的工具清单** — 在同一个界面查看 CLI、全局包和 macOS 开发应用。 |
+| 🔎   | **少做重复检查** — 不必记住每个工具的命令，TendKit 主动识别并自动管理。 |
+| 🎛️   | **每次都由你决定** — 只检查、自动更新，或者先下载制品稍后处理。          |
+| ✅   | **变更先审核** — 新发现的工具和扫描变更都可以接受或拒绝。                |
+| 🛡️   | **生产就绪** — 内置重复识别、任务、安全配置写回和审计日志。              |
+| 📝   | **配置优先** — 一切即配置，喜欢什么就自己加。                            |
+
+TendKit 继续使用现有包管理器和更新方式。它提供统一的查看与操作入口，但不会替代这些工具。
+
+## 🎯 适用场景
+
+| 场景                 | TendKit 如何帮助你                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| **配置或盘点开发机** | 扫描一次，得到可审核的工具清单，不再逐个开发环境手工排查。                 |
+| **日常维护**         | 一次检查所有已纳管工具，只关注真正有新版本的项目。                     |
+| **保护稳定环境**     | 逐项查看结果，只更新选中的工具，避免盲目批量升级。                     |
+| **混合安装来源**     | 在一个界面查看 PATH 工具、全局 npm/Python/Go/uv/Ruby 包和 macOS 应用。 |
 
 ## 🧭 工作方式
 
-1. 🔍 **扫描** — 从 `PATH`、全局包生态和 macOS 应用目录发现支持的工具。
-2. 👀 **审核** — 由你决定保留哪些发现结果和配置变更。
-3. 🚀 **检查或更新** — TendKit 为每个工具选择合适的 Provider，并在 TUI 中展示结果。
-
-支持的数据来源包括 GitHub Releases 与 tags、npm、PyPI、uv、JetBrains、Go、Node.js、Sparkle feed 和自定义命令。
+1. **扫描** — 发现本机支持的开发工具。
+2. **审核** — 决定加入、编辑或排除哪些发现结果。
+3. **检查** — 在一个界面比较当前版本与最新版本。
+4. **处理** — 执行已配置的更新方式，或下载制品稍后处理。
 
 ## 🚀 快速开始
 
-### ✅ 运行要求
+### 📦 安装 TendKit
 
-- `arm64` 或 `x86_64` 架构的 macOS 或 Linux
-- Go 1.23 或更高版本；准确开发工具链见 [`go.mod`](go.mod)
-- `aria2c` 或 `curl`：仅下载制品时需要
+从 [Latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest) 下载对应系统的包，解压后把 `tendkit` 放入 `PATH`。
 
-暂不支持 Windows。支持的 Linux 发行版为 Ubuntu、Debian、CentOS 和 Red Hat Enterprise Linux。
+支持的运行环境：
 
-### 📦 安装发布版本
+- macOS 或 Linux
+- `arm64` 或 `x86_64`
+- Ubuntu、Debian、CentOS 和 Red Hat Enterprise Linux
 
-从 [Latest GitHub Release](https://github.com/eoctet/tendkit/releases/latest) 下载当前平台的归档和
-`checksums.txt`，验证 SHA-256 校验和后，再把 `tendkit` 放入 `PATH`。
+暂不支持 Windows。下载默认支持 `curl` 或 `aria2c`（需自行安装）。
 
-Go 用户也可以直接构建并安装指定标签：
+Go 用户也可以直接安装组件库：
 
 ```bash
 go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
 ```
 
-将 `VERSION` 替换为 `v0.1.0-rc.1` 等标签。GitHub Release 归档包含注入的发布版本；直接
-`go install` 使用源码构建元数据。
-
-### 🛠️ 构建并运行
-
-```bash
-git clone https://github.com/eoctet/tendkit.git
-cd tendkit
-mkdir -p bin
-go build -o ./bin/tendkit ./cmd/tendkit
-tendkit_bin="$(pwd)/bin/tendkit"
-
-mkdir -p /tmp/tendkit-demo
-cd /tmp/tendkit-demo
-"$tendkit_bin" --no-env-file
-```
-
-TendKit 会打开终端界面，并在启动目录创建 `conf/config.json`，不会覆盖已有配置。首次使用临时目录，可以让体验数据与日常工作目录保持隔离。
-
-## ⌨️ 日常操作
-
-| 按键 | 操作 |
-| --- | --- |
-| `↑` / `↓` | 选择工具 |
-| `ENTER` | 打开详情或确认操作 |
-| `SPACE` | 启用或停用当前工具 |
-| `C` / `A` | 检查当前工具 / 检查全部 |
-| `U` / `CTRL+U` | 更新当前工具 / 更新全部 |
-| `F` | 搜索 |
-| `S` / `CTRL+S` | 打开设置 / 扫描管理 |
-| `L` | 查看日志 |
-| `ESC` | 返回或取消 |
-| `Q` | 退出 |
-
-字母快捷键区分大小写。
+> 将 `VERSION` 替换为 `v0.1.0-rc.1` 等标签。
 
 ### 🧩 命令行选项
 
@@ -106,35 +83,49 @@ tendkit version [选项]
 --no-env-file    不加载启动目录中的 .env
 ```
 
-扫描、版本检查、下载、更新和设置都在 TUI 中完成。
+TUI 启动后会创建 `conf/config.json`，不会覆盖已有配置。扫描、版本检查、下载、更新和设置都在 TUI 中完成。
 
-## 🛡️ 默认安全
+## 🔍 TendKit 可以发现什么
 
-TendKit 让操作始终可控：
+TendKit 可以扫描并且识别：
 
-- 使用当前用户权限执行命令，不会自动添加 `sudo`。
-- 执行命令或保存变更前先校验配置。
-- 锁定正在使用的配置，并以原子方式写回。
+- `PATH` 中受支持的开发 CLI；
+- npm、Python、Go、uv 和 Ruby 管理的全局包；
+- macOS 中 `/Applications` 和 `~/Applications` 下的开发应用。
+
+它可以通过 GitHub Releases 与 tags、npm、PyPI、uv、JetBrains、Go、Node.js、Sparkle feed 和自定义命令检查版本。具体能力取决于工具或包管理器能够提供的信息。当前不扫描项目内依赖和虚拟环境。
+
+## 🛡️ 安全与控制
+
+- 使用当前用户权限运行，不会自动添加 `sudo`。
+- 新发现和扫描变更需要先审核。
+- 只有你主动执行时，才会更新、下载或安装。
+- 保存前校验配置，并以原子方式写回。
 - 存在可信校验信息时，可使用 SHA-256 验证下载制品。
-- 支持取消任务，并终止相应子进程组。
-- 将运行日志写入 `logs/run.log`，并限制保留数量。
+- 保持包安装的默认权限。
+- 对凭据、令牌、加密密钥和其他敏感信息进行脱敏。
 
-自定义 Provider action 是 shell 命令。请像代码一样审查，不要在配置或日志中保存凭据和令牌。完整操作与安全模型见[产品用户手册](docs/product/user-manual.md)。
+自定义 Provider action 是 shell 命令。请像代码一样审查，不要在配置或日志中保存凭据、令牌或加密密钥。配置示例、完整操作与安全模型见[产品使用手册](wiki/user-manual_ZH_CN.md)。
+
+## 🛠️ 从源码构建
+
+构建需要 Go 1.23 或更高版本；准确开发工具链见 [`go.mod`](go.mod)。
+
+```bash
+git clone https://github.com/eoctet/tendkit.git
+cd tendkit
+go build -o ./bin/tendkit ./cmd/tendkit
+./bin/tendkit
+```
 
 ## 📚 文档
 
-- [产品用户手册](docs/product/user-manual.md)
-- [功能与产品边界](docs/architecture/features.md)
-- [架构设计](docs/architecture/architecture.md)
-- [开发规范](docs/architecture/development.md)
-- [技术栈规范](docs/architecture/technology-stack.md)
-- [TUI 交互设计](docs/product/tui-interaction-design.md)
-
-详细产品与架构文档目前以简体中文维护。
+- [产品使用手册](wiki/user-manual_ZH_CN.md) · [English](wiki/user-manual.md)
+- [开发与技术规范](wiki/development-and-technical-guide_ZH_CN.md) · [English](wiki/development-and-technical-guide.md)
 
 ## 💬 意见反馈和贡献
 
-发现 Bug 或有新的想法？请使用仓库中的中英文 Issue Form。提交前先搜索已有 Issue，并从日志和截图中删除秘密与私人信息。
+发现 Bug 或有新的想法？请使用仓库中的中英文 Issue Form。提交前先搜索已有 Issue，不要提交凭据、令牌、加密密钥、私有路径或未经脱敏的个人与系统信息。
 
 想贡献代码或文档？请先阅读 [`CONTRIBUTING_ZH_CN.md`](CONTRIBUTING_ZH_CN.md)。保持改动聚焦，补充相关测试，并说明如何验证结果。
 
