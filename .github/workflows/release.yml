@@ -67,16 +67,20 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
           RELEASE_PRERELEASE: ${{ steps.release.outputs.prerelease }}
         run: |
-          release_json="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")"
-          test "$(jq -r '.draft' <<<"${release_json}")" = true
+          release_pages="$(gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
+          release_json="$(jq -ce --arg tag "${GITHUB_REF_NAME}" -s \
+            '[.[][] | select(.tag_name == $tag and .draft == true)]
+            | if length == 1 then .[0]
+              else error("expected exactly one Draft Release for \($tag), found \(length)")
+              end' <<<"${release_pages}")"
 
           expected_assets="$(printf '%s\n' \
             "tendkit_${RELEASE_VERSION}_darwin_arm64.tar.gz" \
             "tendkit_${RELEASE_VERSION}_darwin_x86_64.tar.gz" \
             "tendkit_${RELEASE_VERSION}_linux_arm64.tar.gz" \
             "tendkit_${RELEASE_VERSION}_linux_x86_64.tar.gz" \
-            checksums.txt | sort)"
-          actual_assets="$(jq -r '.assets[].name' <<<"${release_json}" | sort)"
+            checksums.txt | LC_ALL=C sort)"
+          actual_assets="$(jq -r '.assets[].name' <<<"${release_json}" | LC_ALL=C sort)"
           test "${actual_assets}" = "${expected_assets}"
 
           release_id="$(jq -er '.id' <<<"${release_json}")"

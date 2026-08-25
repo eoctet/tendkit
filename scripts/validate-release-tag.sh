@@ -44,20 +44,21 @@ if ! jq -e 'any(.check_runs[]?; .name == "pr" and .app.slug == "github-actions" 
   die "target commit has no successful GitHub Actions pr check"
 fi
 
-release_endpoint="repos/${repository}/releases/tags/${tag}"
-if release_json="$(api "${release_endpoint}" 2>/dev/null)"; then
-  if jq -e '.draft == true' >/dev/null <<<"${release_json}"; then
+releases_endpoint="repos/${repository}/releases?per_page=100"
+release_pages="$(gh api --method GET --paginate "${releases_endpoint}")" || \
+  die "cannot list existing Releases"
+release_matches="$(jq -ce --arg tag "${tag}" -s \
+  '[.[][] | select(.tag_name == $tag)]' <<<"${release_pages}")" || \
+  die "cannot inspect existing Releases"
+release_count="$(jq -r 'length' <<<"${release_matches}")"
+if [[ "${release_count}" -gt 1 ]]; then
+  die "multiple Releases exist for ${tag}"
+fi
+if [[ "${release_count}" -eq 1 ]]; then
+  if jq -e '.[0].draft == true' >/dev/null <<<"${release_matches}"; then
     die "a Draft Release already exists for ${tag}; preserve it for diagnosis"
   fi
   die "a published Release already exists for ${tag}"
-fi
-set +e
-release_response="$(gh api --method GET --include "${release_endpoint}" 2>&1)"
-release_status=$?
-set -e
-[[ ${release_status} -ne 0 ]] || die "Release lookup returned inconsistent results"
-if ! grep -Eq 'HTTP/[0-9.]+ 404' <<<"${release_response}"; then
-  die "cannot determine whether a Release already exists"
 fi
 
 version="${tag#v}"

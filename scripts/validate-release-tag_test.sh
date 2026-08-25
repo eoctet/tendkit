@@ -33,15 +33,15 @@ case "${endpoint}" in
     printf '{"check_runs":[{"name":"%s","conclusion":"%s","app":{"slug":"%s"}}]}\n' \
       "${FAKE_CHECK_NAME:-pr}" "${FAKE_CHECK_CONCLUSION:-success}" "${FAKE_CHECK_APP:-github-actions}"
     ;;
-  repos/test/repo/releases/tags/*)
+  'repos/test/repo/releases?per_page=100')
     if [[ "${FAKE_RELEASE_STATE:-missing}" == "missing" ]]; then
-      printf 'HTTP/2 404 Not Found\n\n{"message":"Not Found"}\n'
-      exit 1
+      printf '[]\n'
+      exit 0
     fi
     if [[ "${FAKE_RELEASE_STATE}" == "draft" ]]; then
-      printf '{"draft":true,"prerelease":false}\n'
+      printf '[{"tag_name":"v1.2.3","draft":true,"prerelease":false}]\n'
     else
-      printf '{"draft":false,"prerelease":false}\n'
+      printf '[{"tag_name":"v1.2.3","draft":false,"prerelease":false}]\n'
     fi
     ;;
   *)
