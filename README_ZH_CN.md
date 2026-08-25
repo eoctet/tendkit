@@ -1,7 +1,7 @@
 # TendKit
 
 <p align="center">
-  <img src="docs/assets/tendkit-logo.png" alt="TendKit Logo" width="720">
+  <img src="assets/tendkit-logo.png" alt="TendKit Logo" width="720">
 </p>
 
 > 看清所有工具，及时发现更新，一切由你掌控。
