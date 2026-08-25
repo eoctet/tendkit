@@ -131,6 +131,8 @@ func TestTUIInputDecoderFlushesIncompleteCSIAsEscapeAndText(t *testing.T) {
 }
 
 func TestReadTUIInputFlushesStandaloneEscape(t *testing.T) {
+	const testDeadline = time.Second
+
 	input, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +149,7 @@ func TestReadTUIInputFlushesStandaloneEscape(t *testing.T) {
 		cancel()
 		select {
 		case <-done:
-		case <-time.After(5 * tuiInputEscapeTimeout):
+		case <-time.After(testDeadline):
 			t.Error("input reader did not stop")
 		}
 	})
@@ -160,7 +162,7 @@ func TestReadTUIInputFlushesStandaloneEscape(t *testing.T) {
 			if event.eventType != tuiEventKey || event.key != "esc" {
 				t.Fatalf("event = %#v, want standalone esc key", event)
 			}
-		case <-time.After(5 * tuiInputEscapeTimeout):
+		case <-time.After(testDeadline):
 			t.Fatal("standalone Escape was not flushed")
 		}
 		if attempt == 0 {
@@ -204,6 +206,8 @@ func TestReadTUIInputFlushesIncompleteCSIOnEOF(t *testing.T) {
 }
 
 func TestReadTUIInputFlushesIncompleteCSIOnTimeout(t *testing.T) {
+	const testDeadline = time.Second
+
 	input, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +218,7 @@ func TestReadTUIInputFlushesIncompleteCSIOnTimeout(t *testing.T) {
 		cancel()
 		select {
 		case <-done:
-		case <-time.After(5 * tuiInputEscapeTimeout):
+		case <-time.After(testDeadline):
 			t.Error("input reader did not stop")
 		}
 		_ = input.Close()
@@ -231,7 +235,7 @@ func TestReadTUIInputFlushesIncompleteCSIOnTimeout(t *testing.T) {
 			if event.eventType != tuiEventKey || event.key != want {
 				t.Fatalf("event = %#v, want key %q", event, want)
 			}
-		case <-time.After(5 * tuiInputEscapeTimeout):
+		case <-time.After(testDeadline):
 			t.Fatalf("timed out waiting for %q", want)
 		}
 	}
