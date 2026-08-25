@@ -17,7 +17,7 @@ jobs:
       TENDKIT_PLATFORM_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: go test ./... -count=1
