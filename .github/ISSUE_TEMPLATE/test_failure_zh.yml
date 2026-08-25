@@ -1,0 +1,70 @@
+name: "🧪 测试或 CI 失败（简体中文）"
+description: 报告可复现的仓库测试或 CI 失败
+title: "[Test Failure]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        此表单用于提交维护者可以调查的测试或 CI 失败，不会由 GitHub 自动创建。
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit 或分支
+      description: 适用时提供完整 commit SHA 和分支名。
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: 失败命令
+      placeholder: "go test ./internal/ui/... -count=1"
+    validations:
+      required: true
+
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow run URL
+      description: CI 失败请提供 GitHub Actions 运行链接；仅本地失败可留空。
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: 包括操作系统、架构、`go version`，以及问题仅在本地、仅在 CI 或两者都会发生。
+    validations:
+      required: true
+
+  - type: textarea
+    id: failure
+    attributes:
+      label: 失败测试与已脱敏输出
+      description: 提供测试名称和相关输出，删除凭据、令牌、环境变量值和私人路径。
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现方式与频率
+      description: 说明失败是稳定还是偶发，并提供已知最短复现方式。
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已重新运行聚焦命令，并记录是否再次失败。
+          required: true
+        - label: 我已删除秘密和敏感的个人或系统信息。
+          required: true

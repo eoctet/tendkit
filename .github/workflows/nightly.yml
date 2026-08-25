@@ -1,0 +1,26 @@
+name: nightly-platform
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-platform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  platform:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    env:
+      TENDKIT_PLATFORM_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./... -count=1
+      - run: go test -race ./... -count=1
+      - run: go test ./internal/ui -run 'TestTUIPTY' -count=20
+      - run: go test ./cmd/tendkit -run 'TestTUI' -count=10

@@ -1,0 +1,61 @@
+name: "🚀 Feature request"
+description: Propose a focused improvement to TendKit
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement. Search existing issues and review the documented product boundaries before submitting.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What workflow is difficult today, who encounters it, and why do current capabilities not solve it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest user-visible outcome you would like, without requiring a particular implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe workarounds or alternative designs and their tradeoffs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and safety impact
+      description: Note affected platforms, providers, configuration fields, commands, downloads, permissions, or compatibility concerns.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add sanitized examples, mockups, or links that clarify the request.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I searched existing issues and did not find the same request.
+          required: true
+        - label: I reviewed the README and relevant product or architecture documentation.
+          required: true

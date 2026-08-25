@@ -1,0 +1,5 @@
+{
+    "config_path": "conf/config.json",
+    "lock_path": "conf/config.json.lock",
+    "env_file": ".env"
+}

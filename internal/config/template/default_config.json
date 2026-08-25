@@ -1,0 +1,47 @@
+{
+    "schema_version": 1,
+    "settings": {
+        "language": "en",
+        "timeout_seconds": 300,
+        "workers": 4,
+        "http": {
+            "timeout_seconds": 60,
+            "max_concurrency_per_host": 1,
+            "retries": 2
+        },
+        "downloader": {
+            "cli": "aria2c",
+            "store_path": "~/Downloads/tendkit",
+            "extra_args": [
+                "--continue=true",
+                "--split=64",
+                "--max-connection-per-server=10",
+                "--show-console-readout=true",
+                "--summary-interval=1",
+                "--console-log-level=notice",
+                "--download-result=hide",
+                "--enable-color=false"
+            ]
+        },
+        "log_dir": "./logs",
+        "log_level": "DEBUG",
+        "provider_urls": {
+            "github_release": "https://api.github.com/repos/{package}/releases/latest",
+            "github_tag": "https://api.github.com/repos/{package}/tags?per_page=1",
+            "npm": "https://registry.npmjs.org/{package}/latest",
+            "pypi": "https://pypi.org/pypi/{package}/json",
+            "jetbrains": "https://data.services.jetbrains.com/products/releases?code={package}&latest=true&type=release",
+            "go": "https://go.dev/dl/?mode=json",
+            "node_lts": "https://nodejs.org/dist/index.json"
+        },
+        "scan": {
+            "path": true,
+            "application": true,
+            "packages": {"python": true, "node": true, "go": true, "uv": true, "ruby": true},
+            "bundle_id": [],
+            "exclude": []
+        }
+    },
+    "apps": [],
+    "scan_version_control": {}
+}

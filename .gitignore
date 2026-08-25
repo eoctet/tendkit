@@ -1,0 +1,76 @@
+# TendKit runtime data
+/.env
+/.env.*
+!/.env.example
+/conf/
+/logs/
+*.log
+
+# Build output and packaged artifacts
+/bin/
+/dist/
+/tendkit
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go test, coverage, profiling, and fuzz artifacts
+/coverage/
+coverage.out
+coverage*.out
+*.coverprofile
+*.prof
+*.pprof
+*.trace
+
+# Local Go workspace files
+go.work
+go.work.sum
+
+# Local tooling and isolated worktrees
+/.codegraph/
+/.worktrees/
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# AI coding assistants: local state, sessions, caches, and indexes
+/.ai/
+/.agent/
+/.agents/
+/.aider/
+/.aider.chat.history.md
+/.aider.input.history
+/.aider.tags.cache.v*
+/.augment/
+/.claude/
+/.cline/
+/.codeium/
+/.codex/
+.codex
+/.continue/
+/.copilot/
+/.cursor/
+/.gemini/
+/.llm/
+/.roo/
+/.tabnine/
+/.windsurf/
+/.mcp.json
+AGENTS.md
+CLAUDE.md
+
+# Python helper caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db

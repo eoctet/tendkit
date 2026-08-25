@@ -1,0 +1,70 @@
+name: "🧪 Test or CI failure"
+description: Report a reproducible repository test or CI failure
+title: "[Test Failure]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a test or CI failure that can be investigated by project maintainers. It is not created automatically.
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or branch
+      description: Provide the full commit SHA and branch name, if applicable.
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Failing command
+      placeholder: "go test ./internal/ui/... -count=1"
+    validations:
+      required: true
+
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow run URL
+      description: For a CI failure, link the GitHub Actions run. Leave blank for a local-only failure.
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, architecture, `go version`, and whether the failure is local, CI-only, or both.
+    validations:
+      required: true
+
+  - type: textarea
+    id: failure
+    attributes:
+      label: Failed tests and sanitized output
+      description: Include test names and the relevant output. Remove credentials, tokens, environment values, and private paths.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and frequency
+      description: State whether the failure is deterministic or intermittent and provide the shortest known reproduction.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checklist
+      options:
+        - label: I reran the focused command and recorded whether it failed again.
+          required: true
+        - label: I removed secrets and sensitive personal or system information.
+          required: true

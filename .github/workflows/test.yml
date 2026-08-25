@@ -1,0 +1,26 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./internal/ui/... -count=1
+      - run: go test ./internal/service ./internal/config ./internal/scanner ./internal/updater/... -count=1
+      - run: go test ./... -count=1
+      - run: go test -race ./internal/ui/... -count=1
+      - run: go vet ./...
+      - run: go build ./...
