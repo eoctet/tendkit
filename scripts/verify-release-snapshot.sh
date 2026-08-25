@@ -33,7 +33,7 @@ done
 
 expected_contents=$'LICENSE\nREADME.md\nREADME_ZH_CN.md\ntendkit'
 for archive in "${archives[@]}"; do
-  actual_contents="$(tar -tzf "${archive}" | sed 's#^\./##' | sort)"
+  actual_contents="$(tar -tzf "${archive}" | sed 's#^\./##' | LC_ALL=C sort)"
   [[ "${actual_contents}" == "${expected_contents}" ]] || {
     printf 'unexpected archive contents: %s\n%s\n' "${archive}" "${actual_contents}" >&2
     exit 1
