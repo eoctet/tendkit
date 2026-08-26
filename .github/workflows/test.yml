@@ -10,8 +10,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr:
-    runs-on: macos-latest
+  platform:
+    name: Full test (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-amd64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -22,12 +35,24 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - run: go test ./internal/ui/... -count=1
-      - run: go test ./internal/service ./internal/config ./internal/scanner ./internal/updater/... -count=1
       - run: go test ./... -count=1
       - run: go test -race ./internal/ui/... -count=1
       - run: go vet ./...
       - run: go build ./...
+
+  pr:
+    needs: platform
+    runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
       - name: Test release tag validation
         run: scripts/validate-release-tag_test.sh
       - name: Check GoReleaser configuration

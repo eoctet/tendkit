@@ -11,7 +11,20 @@ concurrency:
 
 jobs:
   platform:
-    runs-on: macos-latest
+    name: Platform stress test (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-15
+          - target: darwin-amd64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: linux-amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     permissions:
       contents: read
@@ -24,5 +37,7 @@ jobs:
           go-version-file: go.mod
       - run: go test ./... -count=1
       - run: go test -race ./... -count=1
-      - run: go test ./internal/ui -run 'TestTUIPTY' -count=20
-      - run: go test ./cmd/tendkit -run 'TestTUI' -count=10
+      - if: startsWith(matrix.target, 'darwin-')
+        run: go test ./internal/ui -run 'TestTUIPTY' -count=20
+      - if: startsWith(matrix.target, 'darwin-')
+        run: go test ./cmd/tendkit -run 'TestTUI' -count=10
