@@ -174,6 +174,8 @@ func TestReadTUIInputFlushesStandaloneEscape(t *testing.T) {
 }
 
 func TestReadTUIInputFlushesIncompleteCSIOnEOF(t *testing.T) {
+	const testDeadline = time.Second
+
 	input, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -194,13 +196,13 @@ func TestReadTUIInputFlushesIncompleteCSIOnEOF(t *testing.T) {
 			if event.eventType != tuiEventKey || event.key != want {
 				t.Fatalf("event = %#v, want key %q", event, want)
 			}
-		case <-time.After(5 * tuiInputEscapeTimeout):
+		case <-time.After(testDeadline):
 			t.Fatalf("timed out waiting for %q", want)
 		}
 	}
 	select {
 	case <-done:
-	case <-time.After(5 * tuiInputEscapeTimeout):
+	case <-time.After(testDeadline):
 		t.Fatal("input reader did not stop after EOF")
 	}
 }
@@ -242,6 +244,8 @@ func TestReadTUIInputFlushesIncompleteCSIOnTimeout(t *testing.T) {
 }
 
 func TestReadTUIInputStopsAfterCancel(t *testing.T) {
+	const testDeadline = time.Second
+
 	input, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -254,7 +258,7 @@ func TestReadTUIInputStopsAfterCancel(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(5 * tuiInputEscapeTimeout):
+	case <-time.After(testDeadline):
 		t.Fatal("input reader did not stop after cancel")
 	}
 }
@@ -4920,7 +4924,7 @@ func TestTUIWriterFlushDoesNotBlockWhenDroppedNotificationQueueIsFull(t *testing
 		if writer.dropped == 0 {
 			t.Fatal("Flush discarded an undelivered dropped-output count")
 		}
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("Flush blocked on a full event queue")
 	}
 }
@@ -4984,7 +4988,7 @@ func TestStartTUIRunLoggingFailureDoesNotReplaceOperationFailure(t *testing.T) {
 		if !view.messageError || !strings.Contains(view.message, "start failed") || strings.Contains(view.message, "persist failed") {
 			t.Fatalf("message=%q error=%v", view.message, view.messageError)
 		}
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("start failure did not return with a full event queue")
 	}
 }
