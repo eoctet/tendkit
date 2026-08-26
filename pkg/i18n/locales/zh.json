@@ -46,7 +46,7 @@
     "cli.invalid_language": "--lang 必须是 zh 或 en",
     "cli.unsupported_platform": "不支持的平台：%s",
     "config.application_migrated": "已删除 %d 个 macOS application 配置项；原配置备份路径为 %s",
-    "cli.help": "TendKit（Go）\n\n用法:\n  tendkit [通用选项]\n  tendkit version [通用选项]\n\n默认行为:\n  启动交互式终端，并自动在启动目录的 conf 目录中初始化缺失的配置文件\n\n命令:\n  version    显示版本\n\n通用选项:\n  --config PATH   配置文件路径（默认：%s）\n  --lock PATH     并发锁文件路径（默认：配置路径追加 .lock；当前为 %s）\n  --color MODE    颜色模式：auto、always、never\n  --lang LANG     语言：zh、en（默认：根据系统环境）\n  --env-file PATH 加载指定的环境变量文件（默认：启动目录/%s）\n  --no-env-file   禁用自动加载环境变量文件\n",
+    "cli.help": "TendKit（Go）\n\n用法:\n  tendkit [通用选项]\n  tendkit version [通用选项]\n\n默认行为:\n  启动交互式终端，并自动在当前用户的 TendKit 配置目录中初始化\n\n命令:\n  version    显示版本\n\n通用选项:\n  --config PATH   配置文件路径（默认：%s）\n  --lock PATH     并发锁文件路径（默认：配置路径追加 .lock；当前为 %s）\n  --color MODE    颜色模式：auto、always、never\n  --lang LANG     语言：zh、en（默认：根据系统环境）\n  --env-file PATH 加载指定的环境变量文件\n  --no-env-file   禁用全部环境变量文件加载\n",
     "flag.config": "配置路径",
     "config.app_status_managed_invalid": "%s.status_managed.update_status 必须设置",
     "config.app_status_managed_unknown": "%s.status_managed.update_status 不受支持：%q",

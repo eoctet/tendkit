@@ -26,9 +26,10 @@ type Snapshot struct {
 
 // Bootstrap defines startup paths loaded before the catalog is available.
 type Bootstrap struct {
-	ConfigPath string `json:"config_path"`
-	LockPath   string `json:"lock_path"`
-	EnvFile    string `json:"env_file"`
+	ConfigPath  string `json:"config_path"`
+	LockPath    string `json:"lock_path"`
+	EnvFile     string `json:"env_file"`
+	UserEnvFile string `json:"user_env_file"`
 }
 
 // EnvLoadResult describes a dotenv load without exposing variable values.

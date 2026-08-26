@@ -302,6 +302,10 @@ func TestLoggerRotationMakesLegacyActiveAndArchivePrivate(t *testing.T) {
 	}
 }
 func TestLoggerRejectsUnsafeDirectoryAndDestination(t *testing.T) {
+	if _, err := NewLogger("~/.config/tendkit/logs"); err == nil {
+		t.Fatal("unresolved home-relative log directory accepted")
+	}
+
 	unsafeDirectory := filepath.Join(t.TempDir(), "logs")
 	if err := os.Mkdir(unsafeDirectory, 0o770); err != nil {
 		t.Fatal(err)

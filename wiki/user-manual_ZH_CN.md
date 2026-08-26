@@ -26,15 +26,13 @@ TendKit 不替代 Homebrew、npm、pip 或其他包管理器，也不提供后�
 go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
 ```
 
-首次体验建议使用独立目录：
+首次体验可禁止加载启动目录的环境变量文件：
 
 ```bash
-mkdir -p /tmp/tendkit-demo
-cd /tmp/tendkit-demo
 tendkit --no-env-file
 ```
 
-TendKit 会在启动目录创建缺失的 `conf/config.json`，但不会覆盖已有文件。`version` 和帮助命令不会创建配置。
+TendKit 会创建默认配置文件的 `~/.config/tendkit/config.json`，但不会覆盖已有文件。
 
 ## 3. 命令行
 
@@ -47,12 +45,12 @@ tendkit version [通用选项]
 | --- | --- |
 | `version` / `--version` | 输出程序版本，不启动 TUI |
 | `help` / `-h` / `--help` | 显示帮助 |
-| `--config PATH` | 使用其他配置文件；默认 `conf/config.json` |
+| `--config PATH` | 使用其他配置文件；默认 `~/.config/tendkit/config.json` |
 | `--lock PATH` | 使用其他进程锁；默认 `<配置路径>.lock` |
 | `--color MODE` | `auto`、`always` 或 `never` |
 | `--lang LANG` | 使用 `zh` 或 `en` 覆盖界面语言 |
-| `--env-file PATH` | 加载指定且必须存在的环境文件 |
-| `--no-env-file` | 不加载启动目录中的 `.env` |
+| `--env-file PATH` | 加载指定的环境变量文件 |
+| `--no-env-file` | 禁用全部环境变量文件加载 |
 
 示例：
 
@@ -68,7 +66,7 @@ tendkit --config ./custom/config.json --lock ./locks/tendkit.lock
 
 ## 4. 首次使用
 
-1. 启动 TendKit，确认当前目录中的 `conf/config.json` 是你准备长期维护的 catalog。
+1. 启动 TendKit，确认 `~/.config/tendkit/config.json` 是你准备长期维护的 catalog。
 2. 按 `CTRL+S` 进入扫描工作台。
 3. 按 `S` 执行全量扫描。
 4. 审核结果：按 `J` 加入当前候选，按 `A` 加入全部候选，或按 `X` 排除不需要的项目。
@@ -190,10 +188,10 @@ Provider 能检查最新版，不代表一定能自动更新。`provider.actions
 
 | 路径 | 用途 |
 | --- | --- |
-| `conf/config.json` | 唯一持久化 catalog；严格 JSON，当前 `schema_version` 为 `1` |
-| `conf/config.json.lock` | 进程生命周期内的排他锁 |
-| `.env` | 可选环境变量输入；现有进程环境优先 |
-| `logs/run.log` | JSONL 运行与操作日志 |
+| `~/.config/tendkit/config.json` | 唯一持久化 catalog；严格 JSON，当前 `schema_version` 为 `1` |
+| `~/.config/tendkit/config.json.lock` | 进程生命周期内的排他锁 |
+| `~/.config/tendkit/.env` | 可选用户环境变量输入 |
+| `~/.config/tendkit/logs/run.log` | JSONL 运行与操作日志 |
 
 完整默认结构见[默认配置模板](../internal/config/template/default_config.json)。未知字段、多余 JSON、非法枚举、重复 ID/identity 和缺失必填字段都会使加载失败。
 
@@ -238,9 +236,9 @@ Provider 能检查最新版，不代表一定能自动更新。`provider.actions
 优先在 TUI 配置页编辑应用。需要直接修改 JSON 时：
 
 1. 退出 TendKit，避免与活动进程争用配置。
-2. 备份 `conf/config.json`。
+2. 备份 `~/.config/tendkit/config.json`。
 3. 从默认模板保留完整 `settings` 和 `scan_version_control`，只在 `apps` 数组中添加或修改对象。
-4. 使用 `python3 -m json.tool conf/config.json` 检查 JSON。
+4. 使用 `python3 -m json.tool ~/.config/tendkit/config.json` 检查 JSON。
 5. 重新启动 TendKit；严格校验失败时根据错误恢复备份。
 
 ### 9.1 示例：自定义 GitHub Release 工具
@@ -340,13 +338,13 @@ Provider 能检查最新版，不代表一定能自动更新。`provider.actions
 
 ## 10. 环境变量与凭据
 
-TendKit 默认尝试读取启动目录的 `.env`。已有进程环境变量优先，不会被文件覆盖。`--env-file` 指定的文件必须存在，并且不能与 `--no-env-file` 同时使用。
+显式 `--env-file PATH` 指定环境变量文件加载；未指定时，若启动目录 `.env` 存在则加载它，仅在它不存在时才尝试 `~/.config/tendkit/.env`，缺失的默认文件会被忽略；`--no-env-file` 禁用全部文件加载，且不能与 `--env-file` 同时使用。
 
 凭据、令牌和加密密钥只通过进程环境或未提交的 `.env` 提供。敏感变量默认不会传给 action；确实需要继承时，在应用 `environment` 中以同名空值显式声明。不要把这些值写入 catalog、action、下载 URL、路径或日志。
 
 ## 11. 日志、取消与状态
 
-`logs/run.log` 是 JSONL，记录运行、扫描、配置和应用操作。日志按本地日期或 128 MiB 滚动，最多保留 5 个文件。日志故障不会改变检查或更新结果。
+`~/.config/tendkit/logs/run.log` 是 JSONL，记录运行、扫描、配置和应用操作。日志按本地日期或 128 MiB 滚动，最多保留 5 个文件。日志故障不会改变检查或更新结果。
 
 过程状态包括 `waiting`、`checking`、`updating` 和 `downloading`；最终状态包括 `current`、`update_available`、`updated`、`downloaded`、`downloaded_unverified`、`skipped`、`missing` 和 `failed`。
 

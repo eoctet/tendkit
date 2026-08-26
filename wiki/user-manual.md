@@ -26,15 +26,13 @@ Download the archive for your platform from the [latest GitHub Release](https://
 go install github.com/eoctet/tendkit/cmd/tendkit@VERSION
 ```
 
-Use a separate directory for a clean first run:
+Start the TUI without loading a launch-directory environment file:
 
 ```bash
-mkdir -p /tmp/tendkit-demo
-cd /tmp/tendkit-demo
 tendkit --no-env-file
 ```
 
-TendKit creates a missing `conf/config.json` in its launch directory and never overwrites an existing file. The `version` and help commands do not create configuration.
+TendKit creates a missing `~/.config/tendkit/config.json`, and never overwrites an existing file.
 
 ## 3. Command line
 
@@ -47,12 +45,12 @@ tendkit version [global options]
 | --- | --- |
 | `version` / `--version` | Print the version without starting the TUI |
 | `help` / `-h` / `--help` | Show help |
-| `--config PATH` | Use another configuration file; default: `conf/config.json` |
+| `--config PATH` | Use another configuration file; default: `~/.config/tendkit/config.json` |
 | `--lock PATH` | Use another process lock; default: `<config path>.lock` |
 | `--color MODE` | `auto`, `always`, or `never` |
 | `--lang LANG` | Override the interface language with `zh` or `en` |
-| `--env-file PATH` | Load a specific environment file that must exist |
-| `--no-env-file` | Do not load `.env` from the launch directory |
+| `--env-file PATH` | Load a specific environment file |
+| `--no-env-file` | Disable all environment-file loading |
 
 Examples:
 
@@ -68,7 +66,7 @@ Success returns exit code `0`, argument or configuration errors return `2`, and 
 
 ## 4. First use
 
-1. Start TendKit and confirm that `conf/config.json` in the current directory is the catalog you want to maintain.
+1. Start TendKit and confirm that `~/.config/tendkit/config.json` is the catalog you want to maintain.
 2. Press `CTRL+S` to open the scan workspace.
 3. Press `S` to run a full scan.
 4. Review the results: press `J` to add the selected candidate, `A` to add all candidates, or `X` to exclude an item.
@@ -190,10 +188,10 @@ Default files:
 
 | Path | Purpose |
 | --- | --- |
-| `conf/config.json` | The only persistent catalog; strict JSON with current `schema_version` `1` |
-| `conf/config.json.lock` | Exclusive lock held for the process lifetime |
-| `.env` | Optional environment input; the existing process environment wins |
-| `logs/run.log` | JSONL run and operation logs |
+| `~/.config/tendkit/config.json` | The only persistent catalog; strict JSON with current `schema_version` `1` |
+| `~/.config/tendkit/config.json.lock` | Exclusive lock held for the process lifetime |
+| `~/.config/tendkit/.env` | Optional user environment input |
+| `~/.config/tendkit/logs/run.log` | JSONL run and operation logs |
 
 See the [default configuration template](../internal/config/template/default_config.json) for the complete structure. Unknown fields, extra JSON values, invalid enums, duplicate IDs or identities, and missing required fields all cause loading to fail.
 
@@ -238,9 +236,9 @@ See the [default configuration template](../internal/config/template/default_con
 Prefer editing applications through the TUI settings page. When direct JSON editing is necessary:
 
 1. Quit TendKit to avoid competing with an active process.
-2. Back up `conf/config.json`.
+2. Back up `~/.config/tendkit/config.json`.
 3. Preserve the complete `settings` and `scan_version_control` from the default template and add or edit objects only in `apps`.
-4. Check JSON with `python3 -m json.tool conf/config.json`.
+4. Check JSON with `python3 -m json.tool ~/.config/tendkit/config.json`.
 5. Restart TendKit. Restore the backup if strict validation reports an error.
 
 ### 9.1 Example: custom GitHub Release tool
@@ -340,13 +338,13 @@ Unknown or unclosed placeholders fail. Dynamic values in shell actions are safel
 
 ## 10. Environment variables and credentials
 
-TendKit tries to read `.env` from the launch directory by default. Existing process variables take priority and are not overwritten by the file. A file passed to `--env-file` must exist, and that option cannot be combined with `--no-env-file`.
+An explicit `--env-file PATH` is used exclusively and must exist. Without it, TendKit loads the startup directory's `.env` if present; only when that file is absent does it try `~/.config/tendkit/.env`, Missing default files are ignored. `--no-env-file` disables all file loading and cannot be combined with `--env-file`.
 
 Provide credentials, tokens, and cryptographic keys only through the process environment or an uncommitted `.env`. Sensitive variables are not passed to actions by default; when inheritance is required, declare the same name with an empty value in the application's `environment`. Never put these values in the catalog, actions, download URLs, paths, or logs.
 
 ## 11. Logs, cancellation, and statuses
 
-`logs/run.log` is JSONL and records runs, scans, configuration, and application operations. Logs rotate by local date or at 128 MiB, with at most five files retained. Logging failures do not change check or update results.
+`~/.config/tendkit/logs/run.log` is JSONL and records runs, scans, configuration, and application operations. Logs rotate by local date or at 128 MiB, with at most five files retained. Logging failures do not change check or update results.
 
 Transient statuses include `waiting`, `checking`, `updating`, and `downloading`. Final statuses include `current`, `update_available`, `updated`, `downloaded`, `downloaded_unverified`, `skipped`, `missing`, and `failed`.
 

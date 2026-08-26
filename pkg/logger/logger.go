@@ -91,6 +91,9 @@ type Logger struct {
 }
 
 func NewLogger(dir string, levels ...string) (*Logger, error) {
+	if dir == "~" || strings.HasPrefix(dir, "~/") {
+		return nil, fmt.Errorf("%s", i18n.T("log.directory_unsafe", dir))
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}

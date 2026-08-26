@@ -80,10 +80,10 @@ tendkit version [options]
 --color MODE     auto, always, or never
 --lang LANG      en or zh
 --env-file PATH  load a specific environment file
---no-env-file    do not load .env from the launch directory
+--no-env-file    disable all environment-file loading
 ```
 
-The TUI creates `conf/config.json` when it starts and never overwrites existing configuration. Scanning, version checks, downloads, updates, and settings are all handled inside the TUI.
+The TUI creates `~/.config/tendkit/config.json` and its parent directory when it starts, and never overwrites existing configuration. Scanning, version checks, downloads, updates, and settings are all handled inside the TUI.
 
 ## 🔍 What TendKit can find
 

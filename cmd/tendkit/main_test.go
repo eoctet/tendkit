@@ -135,33 +135,85 @@ func TestTUIDependsOnServiceNotUpdater(t *testing.T) {
 	}
 }
 
-func TestRunLoadsExplicitEnvFile(t *testing.T) {
-	const key = "TENDKIT_CLI_ENV_TEST"
-	_ = os.Unsetenv(key)
-	t.Cleanup(func() { _ = os.Unsetenv(key) })
-	path := filepath.Join(t.TempDir(), "custom.env")
-	if err := os.WriteFile(path, []byte(key+"=loaded\n"), 0o600); err != nil {
+func TestRunLoadsOnlyExplicitEnvFile(t *testing.T) {
+	const (
+		sharedKey   = "TENDKIT_CLI_ENV_SHARED_TEST"
+		explicitKey = "TENDKIT_CLI_ENV_EXPLICIT_TEST"
+		startupKey  = "TENDKIT_CLI_ENV_STARTUP_TEST"
+		userKey     = "TENDKIT_CLI_ENV_USER_TEST"
+		processKey  = "TENDKIT_CLI_ENV_PROCESS_TEST"
+	)
+	for _, key := range []string{sharedKey, explicitKey, startupKey, userKey, processKey} {
+		_ = os.Unsetenv(key)
+		key := key
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+	}
+	t.Setenv(processKey, "process")
+
+	workingDirectory, err := os.Getwd()
+	if err != nil {
 		t.Fatal(err)
 	}
-	if code := run([]string{"version", "--env-file", path}); code != 0 {
+	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
+	root := t.TempDir()
+	startupDirectory := filepath.Join(root, "startup")
+	userEnvDirectory := filepath.Join(root, ".config", "tendkit")
+	if err := os.MkdirAll(startupDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(userEnvDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", root)
+	if err := os.Chdir(startupDirectory); err != nil {
+		t.Fatal(err)
+	}
+	explicitPath := filepath.Join(root, "explicit.env")
+	if err := os.WriteFile(explicitPath, []byte(sharedKey+"=explicit\n"+explicitKey+"=explicit\n"+processKey+"=explicit\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(startupDirectory, ".env"), []byte(sharedKey+"=startup\n"+startupKey+"=startup\n"+processKey+"=startup\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userEnvDirectory, ".env"), []byte(sharedKey+"=user\n"+userKey+"=user\n"+processKey+"=user\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := run([]string{"version", "--env-file", explicitPath}); code != 0 {
 		t.Fatalf("run returned %d", code)
 	}
-	if value := os.Getenv(key); value != "loaded" {
-		t.Fatalf("loaded value = %q", value)
+	for key, want := range map[string]string{
+		sharedKey: "explicit", explicitKey: "explicit", startupKey: "", userKey: "", processKey: "process",
+	} {
+		if got := os.Getenv(key); got != want {
+			t.Errorf("%s=%q, want %q", key, got, want)
+		}
 	}
 }
 
-func TestRunLoadsDefaultEnvFile(t *testing.T) {
-	const key = "TENDKIT_CLI_DEFAULT_ENV_TEST"
-	_ = os.Unsetenv(key)
-	t.Cleanup(func() { _ = os.Unsetenv(key) })
+func TestRunSelectsStartupEnvFileBeforeUserEnvFile(t *testing.T) {
+	const startupKey = "TENDKIT_CLI_DEFAULT_ENV_TEST"
+	const userKey = "TENDKIT_CLI_USER_ENV_TEST"
+	for _, key := range []string{startupKey, userKey} {
+		_ = os.Unsetenv(key)
+		key := key
+		t.Cleanup(func() { _ = os.Unsetenv(key) })
+	}
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
 	temporaryDirectory := t.TempDir()
-	if err := os.WriteFile(filepath.Join(temporaryDirectory, ".env"), []byte(key+"=loaded-by-default\n"), 0o600); err != nil {
+	userEnvDirectory := filepath.Join(temporaryDirectory, ".config", "tendkit")
+	if err := os.MkdirAll(userEnvDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", temporaryDirectory)
+	if err := os.WriteFile(filepath.Join(temporaryDirectory, ".env"), []byte(startupKey+"=loaded-by-startup\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userEnvDirectory, ".env"), []byte(userKey+"=loaded-by-user\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chdir(temporaryDirectory); err != nil {
@@ -170,8 +222,44 @@ func TestRunLoadsDefaultEnvFile(t *testing.T) {
 	if code := run([]string{"version"}); code != 0 {
 		t.Fatalf("run returned %d", code)
 	}
-	if value := os.Getenv(key); value != "loaded-by-default" {
-		t.Fatalf("loaded value = %q", value)
+	if value := os.Getenv(startupKey); value != "loaded-by-startup" {
+		t.Fatalf("startup value = %q", value)
+	}
+	if value := os.Getenv(userKey); value != "" {
+		t.Fatalf("lower-priority user file was also loaded: %q", value)
+	}
+}
+
+func TestRunFallsBackToUserEnvFile(t *testing.T) {
+	const key = "TENDKIT_CLI_USER_ENV_FALLBACK_TEST"
+	_ = os.Unsetenv(key)
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
+	home := t.TempDir()
+	startupDirectory := filepath.Join(home, "startup")
+	userEnvDirectory := filepath.Join(home, ".config", "tendkit")
+	if err := os.MkdirAll(startupDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(userEnvDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	if err := os.Chdir(startupDirectory); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userEnvDirectory, ".env"), []byte(key+"=loaded-by-user-fallback\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"version"}); code != 0 {
+		t.Fatalf("run returned %d", code)
+	}
+	if value := os.Getenv(key); value != "loaded-by-user-fallback" {
+		t.Fatalf("fallback value = %q", value)
 	}
 }
 
@@ -185,7 +273,15 @@ func TestRunNoEnvFileDisablesDefaultLoad(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
 	temporaryDirectory := t.TempDir()
+	userEnvDirectory := filepath.Join(temporaryDirectory, ".config", "tendkit")
+	if err := os.MkdirAll(userEnvDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", temporaryDirectory)
 	if err := os.WriteFile(filepath.Join(temporaryDirectory, ".env"), []byte(key+"=unexpected\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userEnvDirectory, ".env"), []byte(key+"=also-unexpected\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chdir(temporaryDirectory); err != nil {
@@ -452,6 +548,18 @@ func TestParseCommandOptionsDerivesLockPathFromConfig(t *testing.T) {
 	}
 }
 
+func TestResolveCommandPathsRejectsMissingUserHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	bootstrap := service.DefaultBootstrap()
+	options, code, done := parseCommandOptions("default", nil, bootstrap)
+	if done || code != 0 {
+		t.Fatalf("parseCommandOptions() done=%t code=%d", done, code)
+	}
+	if _, err := resolveCommandPaths(options); err == nil {
+		t.Fatal("default paths were accepted without a resolvable user home")
+	}
+}
+
 func TestRunRejectsRemovedExecutionOptions(t *testing.T) {
 	for _, arguments := range [][]string{
 		{"version", "--workers", "1"},
@@ -469,10 +577,21 @@ func TestRunRejectsRemovedExecutionOptions(t *testing.T) {
 }
 
 func TestDefaultTUIAutoInitializesMissingConfigurationAndAcceptsGlobalOptions(t *testing.T) {
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
+	if err := os.Chdir(directory); err != nil {
+		t.Fatal(err)
+	}
 	configPath := filepath.Join(directory, "custom", "config.json")
 	lockPath := filepath.Join(directory, "config.lock")
 	envPath := filepath.Join(directory, "options.env")
+	_ = os.Unsetenv("TENDKIT_MAIN_TEST")
+	t.Cleanup(func() { _ = os.Unsetenv("TENDKIT_MAIN_TEST") })
 	if err := os.WriteFile(envPath, []byte("TENDKIT_MAIN_TEST=1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -499,6 +618,7 @@ func TestDefaultTUIAutoInitializesMissingConfigurationAndAcceptsGlobalOptions(t 
 
 func TestDefaultTUICreatesDerivedLockBesideCustomConfiguration(t *testing.T) {
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
 	configPath := filepath.Join(directory, "custom", "catalog.json")
 	lockPath := configPath + ".lock"
 	code := runWithTUI([]string{"--config", configPath, "--no-env-file", "--color", "never"}, func(_ context.Context, _ *service.Service, _ ui.Mode) error {
@@ -515,13 +635,14 @@ func TestDefaultTUICreatesDerivedLockBesideCustomConfiguration(t *testing.T) {
 	}
 }
 
-func TestDefaultTUIUsesConfDirectoryUnderStartupDirectory(t *testing.T) {
+func TestDefaultTUIUsesAndCreatesUserConfigDirectory(t *testing.T) {
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(workingDirectory) })
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
 	if err := os.Chdir(directory); err != nil {
 		t.Fatal(err)
 	}
@@ -535,9 +656,17 @@ func TestDefaultTUIUsesConfDirectoryUnderStartupDirectory(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("runWithTUI returned %d", code)
 	}
-	path := filepath.Join(directory, "conf", "config.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("default initialization did not create %s: %v", path, err)
+	for _, path := range []string{
+		filepath.Join(directory, ".config", "tendkit", "config.json"),
+		filepath.Join(directory, ".config", "tendkit", "config.json.lock"),
+		filepath.Join(directory, ".config", "tendkit", "logs", "run.log"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("default initialization did not create %s: %v", path, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(directory, "conf")); !os.IsNotExist(err) {
+		t.Fatalf("legacy startup-directory config was created: %v", err)
 	}
 }
 
@@ -611,6 +740,7 @@ func TestLanguageArgument(t *testing.T) {
 
 func TestConfiguredLanguageAndCLIOverridePrecedence(t *testing.T) {
 	directory := t.TempDir()
+	t.Setenv("HOME", directory)
 	store := config.New(filepath.Join(directory, "config.json"), filepath.Join(directory, "config.lock"))
 	catalog := config.Default()
 	catalog.Settings.Language = "en"

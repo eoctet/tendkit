@@ -72,6 +72,10 @@ func runWithTUI(arguments []string, startTUI tuiRunner) int {
 	if err := requireSupportedHost(context.Background()); err != nil {
 		return reportError(err)
 	}
+	options, err := resolveCommandPaths(options)
+	if err != nil {
+		return reportError(err)
+	}
 	applicationService := service.New(options.configPath, options.lockPath)
 	catalog, err := applicationService.Start()
 	if err != nil {
@@ -87,6 +91,20 @@ func runWithTUI(arguments []string, startTUI tuiRunner) int {
 		return reportError(err)
 	}
 	return 0
+}
+
+func resolveCommandPaths(options commandOptions) (commandOptions, error) {
+	configPath, err := service.ResolvePath(options.configPath)
+	if err != nil {
+		return commandOptions{}, err
+	}
+	lockPath, err := service.ResolvePath(options.lockPath)
+	if err != nil {
+		return commandOptions{}, err
+	}
+	options.configPath = configPath
+	options.lockPath = lockPath
+	return options, nil
 }
 
 func requireSupportedHost(ctx context.Context) error {
@@ -180,7 +198,7 @@ func loadCommandEnvironment(options commandOptions, bootstrap service.Bootstrap)
 	if options.noEnvFile {
 		return 0
 	}
-	err := service.LoadEnvironment(options.envPath, options.envPath != "", bootstrap.EnvFile)
+	err := service.LoadEnvironment(options.envPath, bootstrap)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, i18n.T("label.error")+":", err)
 		return 2
@@ -207,7 +225,7 @@ func usage(bootstrap service.Bootstrap) {
 }
 
 func usageText(bootstrap service.Bootstrap) string {
-	return "\n" + i18n.Banner() + "\n\n" + i18n.T("cli.help", bootstrap.ConfigPath, bootstrap.LockPath, bootstrap.EnvFile)
+	return "\n" + i18n.Banner() + "\n\n" + i18n.T("cli.help", bootstrap.ConfigPath, bootstrap.LockPath)
 }
 
 func languageArgument(arguments []string) (i18n.Language, bool, error) {

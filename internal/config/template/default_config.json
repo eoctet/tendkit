@@ -23,7 +23,7 @@
                 "--enable-color=false"
             ]
         },
-        "log_dir": "./logs",
+        "log_dir": "~/.config/tendkit/logs",
         "log_level": "DEBUG",
         "provider_urls": {
             "github_release": "https://api.github.com/repos/{package}/releases/latest",

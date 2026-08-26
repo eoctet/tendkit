@@ -1,5 +1,6 @@
 {
-    "config_path": "conf/config.json",
-    "lock_path": "conf/config.json.lock",
-    "env_file": ".env"
+    "config_path": "~/.config/tendkit/config.json",
+    "lock_path": "~/.config/tendkit/config.json.lock",
+    "env_file": ".env",
+    "user_env_file": "~/.config/tendkit/.env"
 }

@@ -1140,12 +1140,18 @@ func TestEmbeddedDefaultsAreValidAndIndependent(t *testing.T) {
 	if second.Settings.HTTP.TimeoutSeconds == 1 {
 		t.Fatal("default catalog instances share HTTP configuration")
 	}
+	if second.Settings.LogDir != "~/.config/tendkit/logs" {
+		t.Fatalf("default log directory = %q", second.Settings.LogDir)
+	}
 	bootstrap := DefaultBootstrap()
-	if bootstrap.ConfigPath == "" || bootstrap.LockPath == "" || bootstrap.EnvFile == "" {
+	if bootstrap.ConfigPath == "" || bootstrap.LockPath == "" || bootstrap.EnvFile == "" || bootstrap.UserEnvFile == "" {
 		t.Fatalf("invalid bootstrap defaults: %+v", bootstrap)
 	}
-	if bootstrap.ConfigPath != "conf/config.json" || bootstrap.LockPath != "conf/config.json.lock" {
-		t.Fatalf("default bootstrap paths are not under conf: %+v", bootstrap)
+	if bootstrap.ConfigPath != "~/.config/tendkit/config.json" || bootstrap.LockPath != "~/.config/tendkit/config.json.lock" {
+		t.Fatalf("default bootstrap paths are not under the user config directory: %+v", bootstrap)
+	}
+	if bootstrap.EnvFile != ".env" || bootstrap.UserEnvFile != "~/.config/tendkit/.env" {
+		t.Fatalf("default environment paths are invalid: %+v", bootstrap)
 	}
 }
 

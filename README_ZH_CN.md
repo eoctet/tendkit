@@ -79,11 +79,11 @@ tendkit version [选项]
 --lock PATH      使用其他进程锁文件
 --color MODE     auto、always 或 never
 --lang LANG      en 或 zh
---env-file PATH  加载指定环境变量文件
---no-env-file    不加载启动目录中的 .env
+--env-file PATH  加载指定的环境变量文件
+--no-env-file    禁用全部环境变量文件加载
 ```
 
-TUI 启动后会创建 `conf/config.json`，不会覆盖已有配置。扫描、版本检查、下载、更新和设置都在 TUI 中完成。
+TUI 启动后会创建 `~/.config/tendkit/config.json` 及其父目录，不会覆盖已有配置。扫描、版本检查、下载、更新和设置都在 TUI 中完成。
 
 ## 🔍 TendKit 可以发现什么
 

@@ -155,11 +155,11 @@ func TestTranslationUsesSelectedLanguage(t *testing.T) {
 	previous := Current()
 	t.Cleanup(func() { Set(previous) })
 	Set(Chinese)
-	if message := T("cli.help", "config", "lock", ".env"); !strings.Contains(message, "默认行为") {
+	if message := T("cli.help", "config", "lock", ".env", "user/.env"); !strings.Contains(message, "默认行为") {
 		t.Fatalf("unexpected Chinese message %q", message)
 	}
 	Set(English)
-	if message := T("cli.help", "config", "lock", ".env"); !strings.Contains(message, "Default behavior") {
+	if message := T("cli.help", "config", "lock", ".env", "user/.env"); !strings.Contains(message, "Default behavior") {
 		t.Fatalf("unexpected English message %q", message)
 	}
 }

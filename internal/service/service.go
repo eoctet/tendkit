@@ -16,10 +16,23 @@ type Bootstrap = config.Bootstrap
 
 func DefaultBootstrap() Bootstrap { return config.DefaultBootstrap() }
 
-func LoadEnvironment(path string, required bool, defaultPath string) error {
-	_, err := config.LoadEnvFile(path, required, defaultPath)
+func LoadEnvironment(path string, bootstrap Bootstrap) error {
+	if path != "" {
+		_, err := config.LoadEnvFile(path, true, "")
+		return err
+	}
+	startup, err := config.LoadEnvFile("", false, bootstrap.EnvFile)
+	if err != nil {
+		return err
+	}
+	if startup.Exists {
+		return nil
+	}
+	_, err = config.LoadEnvFile(bootstrap.UserEnvFile, false, "")
 	return err
 }
+
+func ResolvePath(path string) (string, error) { return config.ResolvePath(path, "") }
 
 // Service coordinates persistent configuration transactions for the TUI.
 type Service struct {
