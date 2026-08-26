@@ -183,10 +183,16 @@ func TestRunTruncatesCapturedOutput(t *testing.T) {
 func TestRunDeliversOutputDrainedAfterCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	var seen strings.Builder
+	var stdout strings.Builder
+	var stderr strings.Builder
 	r := Runner{IdleTimeout: time.Second, OnOutput: func(_ context.Context, output OutputEvent) {
-		seen.Write(output.Data)
-		if strings.Contains(seen.String(), "first") {
+		switch output.Stream {
+		case StreamStdout:
+			stdout.Write(output.Data)
+		case StreamStderr:
+			stderr.Write(output.Data)
+		}
+		if strings.Contains(stdout.String(), "first") {
 			cancel()
 		}
 	}}
@@ -194,7 +200,10 @@ func TestRunDeliversOutputDrainedAfterCancellation(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Run error = %v, want cancellation", err)
 	}
-	if seen.String() != result.Stdout {
-		t.Fatalf("callback output = %q, result stdout = %q", seen.String(), result.Stdout)
+	if stdout.String() != result.Stdout {
+		t.Fatalf("callback stdout = %q, result stdout = %q", stdout.String(), result.Stdout)
+	}
+	if stderr.String() != result.Stderr {
+		t.Fatalf("callback stderr = %q, result stderr = %q", stderr.String(), result.Stderr)
 	}
 }
