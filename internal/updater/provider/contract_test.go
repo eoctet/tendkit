@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -249,6 +250,9 @@ func TestGoComponentUpdateRejectsIncompleteMetadataAndPreservesCancellation(t *t
 }
 
 func TestSparkleUpdateUsesOfficialCLIAgainstBundleMetadata(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Sparkle updates are Darwin-specific")
+	}
 	directory := t.TempDir()
 	marker := filepath.Join(directory, "sparkle-args")
 	cli := filepath.Join(directory, "sparkle")

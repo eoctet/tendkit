@@ -118,7 +118,7 @@ func TestDownloadAssetCandidatesFiltersTargetsRejectsUnknownAndHasNoRunSideEffec
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
 		if request.URL.Path == "/go" {
-			_, _ = writer.Write([]byte(`[{"version":"go1.2.3","stable":true,"files":[{"filename":"go1.2.3.darwin-` + runtime.GOARCH + `.pkg","os":"darwin","arch":"` + runtime.GOARCH + `","kind":"installer"},{"filename":"go1.2.3.darwin-` + runtime.GOARCH + `.tar.gz","os":"darwin","arch":"` + runtime.GOARCH + `","kind":"archive"}]}]`))
+			_, _ = writer.Write([]byte(`[{"version":"go1.2.3","stable":true,"files":[{"filename":"go1.2.3.` + runtime.GOOS + `-` + runtime.GOARCH + `.tar.gz","os":"` + runtime.GOOS + `","arch":"` + runtime.GOARCH + `","kind":"archive"},{"filename":"go1.2.3.` + runtime.GOOS + `-` + runtime.GOARCH + `.zip","os":"` + runtime.GOOS + `","arch":"` + runtime.GOARCH + `","kind":"archive"}]}]`))
 			return
 		}
 		_, _ = writer.Write([]byte(`{"assets":[{"name":"tool-darwin-arm64.dmg","browser_download_url":"https://github.com/acme/tool.dmg"}]}`))
@@ -560,6 +560,9 @@ func TestPreviewApplicationScanDoesNotRunUnrelatedApplications(t *testing.T) {
 }
 
 func TestSaveScanSnapshotRegistersBundleIDWhenAppBecomesManaged(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS bundle persistence is Darwin-specific")
+	}
 	directory := t.TempDir()
 	appPath := filepath.Join(directory, "Knowledge.app")
 	plistPath := filepath.Join(appPath, filepath.FromSlash("Contents/Info.plist"))

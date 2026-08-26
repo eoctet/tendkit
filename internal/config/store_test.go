@@ -533,7 +533,10 @@ func TestLoadKeepsMemorySnapshotUntilExplicitReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	replacement := value
+	replacement, err := store.load()
+	if err != nil {
+		t.Fatal(err)
+	}
 	replacement.Apps[0].Name = "Other"
 	temporary, err := prepareJSONFile(store.ConfigPath, replacement)
 	if err != nil {

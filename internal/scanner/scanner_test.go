@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -785,6 +786,9 @@ func TestObsidianBundleIsRecognizedAsDevelopmentApplication(t *testing.T) {
 }
 
 func TestEnrichConfiguredMetadataAddsOnlyMissingManagedBundleDescription(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS application metadata is Darwin-specific")
+	}
 	appPath := filepath.Join(t.TempDir(), "Fixture.app")
 	plistPath := filepath.Join(appPath, filepath.FromSlash("Contents/Info.plist"))
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
@@ -825,6 +829,9 @@ func TestEnrichConfiguredMetadataAddsOnlyMissingManagedBundleDescription(t *test
 }
 
 func TestManagedObsidianIdentityAndObservationRemainStable(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS bundle identity is Darwin-specific")
+	}
 	appPath := filepath.Join(t.TempDir(), "Obsidian.app")
 	plistPath := filepath.Join(appPath, filepath.FromSlash("Contents/Info.plist"))
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
@@ -974,7 +981,7 @@ if [ "$1" = "env" ]; then
     printf '%s\n\n' "$FAKE_GOPATH"
     exit 0
 fi
-sleep 1
+/bin/sleep 1
 `
 	if err := os.WriteFile(filepath.Join(managerDirectory, "go"), []byte(goScript), 0o755); err != nil {
 		t.Fatal(err)

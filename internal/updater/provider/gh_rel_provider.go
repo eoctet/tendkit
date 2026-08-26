@@ -16,6 +16,14 @@ import (
 type GitHubReleaseProvider struct {
 	Source   *HTTPSource
 	Endpoint string
+	host     func() runtimeutil.SystemInfo
+}
+
+func (p GitHubReleaseProvider) systemInfo() runtimeutil.SystemInfo {
+	if p.host != nil {
+		return p.host()
+	}
+	return runtimeutil.HostPlatform()
 }
 
 func (p GitHubReleaseProvider) Latest(ctx context.Context, request Request) (string, error) {
@@ -80,7 +88,7 @@ func (p GitHubReleaseProvider) ArtifactChoices(ctx context.Context, request Requ
 	if err != nil {
 		return model.DownloadAssetChoices{}, err
 	}
-	choices, fallback := githubReleaseAssetCandidates(assets, runtimeutil.HostPlatform())
+	choices, fallback := githubReleaseAssetCandidates(assets, p.systemInfo())
 	return model.DownloadAssetChoices{Candidates: choices, SelectionRequired: fallback}, nil
 }
 
@@ -116,7 +124,7 @@ func (p GitHubReleaseProvider) asset(ctx context.Context, request Request) (gith
 		return githubReleaseAsset{}, NewError("provider.github_asset_named_unavailable", targetName)
 	}
 	if selected := strings.TrimSpace(request.SelectedArtifact); selected != "" {
-		info := runtimeutil.HostPlatform()
+		info := p.systemInfo()
 		choices, _ := githubReleaseAssetCandidates(assets, info)
 		for _, asset := range assets {
 			if asset.Name == selected {
@@ -128,7 +136,7 @@ func (p GitHubReleaseProvider) asset(ctx context.Context, request Request) (gith
 		}
 		return githubReleaseAsset{}, NewError("provider.github_asset_named_unavailable", selected)
 	}
-	info := runtimeutil.HostPlatform()
+	info := p.systemInfo()
 	return selectGitHubReleaseAsset(assets, info)
 }
 

@@ -30,7 +30,7 @@ func TestBuildMetadataDefaults(t *testing.T) {
 	}
 }
 
-func saveCommandTestConfig(t *testing.T, center *config.Center, catalog model.Config) {
+func saveCommandTestConfig(t *testing.T, center *config.Center, catalog model.Config) model.Config {
 	t.Helper()
 	if err := center.Initialize(); err != nil {
 		t.Fatal(err)
@@ -42,6 +42,11 @@ func saveCommandTestConfig(t *testing.T, center *config.Center, catalog model.Co
 	if err := center.Save(snapshot.Revision, catalog); err != nil {
 		t.Fatal(err)
 	}
+	saved, err := center.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return saved
 }
 
 func TestRunInteractiveTUIBuildsServiceCallbacks(t *testing.T) {
@@ -302,7 +307,7 @@ func TestSaveTUICatalogClearsKeepsOnlyOnUnmanage(t *testing.T) {
 	catalog.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), ScanManaged: true, StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}, {ID: "other", Name: "Other", Type: model.ApplicationTypeCLI, InstallPath: "other", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
 	resolution := model.ScanKeepResolution{Fingerprint: strings.Repeat("a", 64), RecordedAt: "2026-08-16T00:00:00+08:00"}
 	catalog.ScanVersionControl = map[string]map[string]model.ScanKeepResolution{"managed": {"description": resolution}, "other": {"description": resolution}}
-	saveCommandTestConfig(t, store, catalog)
+	catalog = saveCommandTestConfig(t, store, catalog)
 	proposed := catalog
 	proposed.Apps = append([]model.Application(nil), catalog.Apps...)
 	proposed.Apps[0].ScanManaged = false
@@ -344,7 +349,7 @@ func TestSaveTUICatalogStateBoundaries(t *testing.T) {
 		store := config.New(filepath.Join(directory, "config.json"), filepath.Join(directory, "config.lock"))
 		catalog := config.Default()
 		catalog.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), ScanManaged: managed, StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
-		saveCommandTestConfig(t, store, catalog)
+		catalog = saveCommandTestConfig(t, store, catalog)
 		return store, catalog
 	}
 	t.Run("manage preserves existing version control", func(t *testing.T) {
@@ -412,7 +417,7 @@ func TestSaveTUICatalogMergesConcurrentStatusAndScanKeep(t *testing.T) {
 	store := config.New(filepath.Join(directory, "config.json"), filepath.Join(directory, "config.lock"))
 	expected := config.Default()
 	expected.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
-	saveCommandTestConfig(t, store, expected)
+	expected = saveCommandTestConfig(t, store, expected)
 	concurrent := expected
 	concurrent.Apps = append([]model.Application(nil), expected.Apps...)
 	concurrent.Apps[0].StatusManaged = model.ManagedStatus{CurrentVersion: "1.0.0", UpdateStatus: model.StatusCurrent}
@@ -447,7 +452,7 @@ func TestSaveTUICatalogRejectsConcurrentConfiguration(t *testing.T) {
 	store := config.New(filepath.Join(directory, "config.json"), filepath.Join(directory, "config.lock"))
 	expected := config.Default()
 	expected.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
-	saveCommandTestConfig(t, store, expected)
+	expected = saveCommandTestConfig(t, store, expected)
 	changedLanguage := "en"
 	if expected.Settings.Language == changedLanguage {
 		changedLanguage = "zh"

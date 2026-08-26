@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -26,6 +27,9 @@ func (runner *metadataRunner) Run(_ context.Context, command string, _ map[strin
 }
 
 func TestReadMacApplicationMetadata(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("plutil is available only on macOS")
+	}
 	appPath := filepath.Join(t.TempDir(), "Fixture.app")
 	infoPath := filepath.Join(appPath, "Contents", "Info.plist")
 	if err := os.MkdirAll(filepath.Dir(infoPath), 0o700); err != nil {

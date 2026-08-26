@@ -23,6 +23,32 @@ import (
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
+func detectedProviderTestHost(t *testing.T) runtimeutil.SystemInfo {
+	t.Helper()
+	info, err := runtimeutil.DetectSystemInfo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Supported() {
+		t.Fatalf("unsupported test host: %#v", info)
+	}
+	return info
+}
+
+func providerTestAssetPlatform(info runtimeutil.SystemInfo) string {
+	if info.Kernel == "darwin" {
+		return "macos"
+	}
+	return info.Kernel
+}
+
+func providerTestAssetArchitecture(info runtimeutil.SystemInfo) string {
+	if info.Architecture == "x86_64" {
+		return "x64"
+	}
+	return "arm64"
+}
+
 func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)
 }
@@ -278,23 +304,23 @@ func TestGitHubReleaseProviderResolvesAssetDigest(t *testing.T) {
 }
 
 func TestGitHubReleaseProviderSelectsOnlyOneHostAssetWithoutAction(t *testing.T) {
-	arch := "arm64"
-	if runtime.GOARCH == "amd64" {
-		arch = "x64"
-	}
+	info := detectedProviderTestHost(t)
+	arch := providerTestAssetArchitecture(info)
+	platform := providerTestAssetPlatform(info)
+	hostAsset := "sample-" + platform + "-" + arch + ".tar.gz"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"assets":[{"name":"Obsidian-universal.dmg","browser_download_url":"https://%s/sample.dmg"},{"name":"sample-windows-%s.zip","browser_download_url":"https://%s/sample.exe"}]}`, request.Host, arch, request.Host)
+		_, _ = fmt.Fprintf(w, `{"assets":[{"name":%q,"browser_download_url":"https://%s/sample.tar.gz"},{"name":"sample-windows-%s.zip","browser_download_url":"https://%s/sample.exe"}]}`, hostAsset, request.Host, arch, request.Host)
 	}))
 	defer server.Close()
-	implementation := GitHubReleaseProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL}
+	implementation := GitHubReleaseProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL, host: func() runtimeutil.SystemInfo { return info }}
 	request := Request{App: model.Application{Package: "owner/repo"}}
 	candidates, err := implementation.ArtifactChoices(context.Background(), request)
-	if err != nil || candidates.SelectionRequired || !slices.Equal(candidates.Candidates, []string{"Obsidian-universal.dmg"}) {
+	if err != nil || candidates.SelectionRequired || !slices.Equal(candidates.Candidates, []string{hostAsset}) {
 		t.Fatalf("host candidates = %#v, %v", candidates, err)
 	}
 	download, err := implementation.Download(context.Background(), request)
-	if err != nil || download.URL != "https://"+requestHost(server.URL)+"/sample.dmg" {
+	if err != nil || download.URL != "https://"+requestHost(server.URL)+"/sample.tar.gz" {
 		t.Fatalf("automatic GitHub asset selection = %#v, %v", download, err)
 	}
 	request.SelectedArtifact = "sample-windows-" + arch + ".zip"
@@ -356,16 +382,15 @@ func TestGitHubReleaseProviderFallsBackToAllNamedAssetsWhenHostCannotBeInferred(
 }
 
 func TestGitHubReleaseProviderRejectsAmbiguousHostAssets(t *testing.T) {
-	arch := "arm64"
-	if runtime.GOARCH == "amd64" {
-		arch = "x64"
-	}
+	info := detectedProviderTestHost(t)
+	arch := providerTestAssetArchitecture(info)
+	platform := providerTestAssetPlatform(info)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"assets":[{"name":"sample-macos-%s.zip","browser_download_url":"https://example.invalid/one.zip"},{"name":"sample-darwin-%s.dmg","browser_download_url":"https://example.invalid/two.dmg"}]}`, arch, arch)
+		_, _ = fmt.Fprintf(w, `{"assets":[{"name":"sample-%s-%s.zip","browser_download_url":"https://example.invalid/one.zip"},{"name":"other-%s-%s.tar.gz","browser_download_url":"https://example.invalid/two.tar.gz"}]}`, platform, arch, platform, arch)
 	}))
 	defer server.Close()
-	_, err := (GitHubReleaseProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL}).Download(context.Background(), Request{App: model.Application{Package: "owner/repo"}})
+	_, err := (GitHubReleaseProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL, host: func() runtimeutil.SystemInfo { return info }}).Download(context.Background(), Request{App: model.Application{Package: "owner/repo"}})
 	var typed *Error
 	if !errors.As(err, &typed) || typed.Key != "provider.github_asset_ambiguous" {
 		t.Fatalf("ambiguous automatic selection error = %#v", err)
@@ -373,19 +398,20 @@ func TestGitHubReleaseProviderRejectsAmbiguousHostAssets(t *testing.T) {
 }
 
 func TestGoProviderListsAndDownloadsSelectedHostFile(t *testing.T) {
+	info := detectedProviderTestHost(t)
+	goArch, _ := info.GoArchitecture()
 	files := []string{
-		"go1.2.3.darwin-" + runtime.GOARCH + ".pkg",
-		"go1.2.3.darwin-" + runtime.GOARCH + ".tar.gz",
+		"go1.2.3." + info.Kernel + "-" + goArch + ".tar.gz",
+		"go1.2.3." + info.Kernel + "-" + goArch + ".zip",
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[
-{"filename":%q,"os":"darwin","arch":%q,"kind":"archive"},
-{"filename":"go1.2.3.linux-%s.tar.gz","os":"linux","arch":%q,"kind":"archive"},
-{"filename":%q,"os":"darwin","arch":%q,"kind":"installer"}
-]}]`, files[1], runtime.GOARCH, runtime.GOARCH, runtime.GOARCH, files[0], runtime.GOARCH)
+		{"filename":%q,"os":%q,"arch":%q,"kind":"archive"},
+		{"filename":%q,"os":%q,"arch":%q,"kind":"archive"}
+		]}]`, files[0], info.Kernel, goArch, files[1], info.Kernel, goArch)
 	}))
 	defer server.Close()
-	implementation := GoProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL + "/?mode=json"}
+	implementation := GoProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL + "/?mode=json", host: func() runtimeutil.SystemInfo { return info }}
 
 	candidates, err := implementation.ArtifactCandidates(context.Background(), Request{})
 	if err != nil || !slices.Equal(candidates, files) {
@@ -399,12 +425,20 @@ func TestGoProviderListsAndDownloadsSelectedHostFile(t *testing.T) {
 }
 
 func TestGoProviderRejectsInvalidSelectedFile(t *testing.T) {
+	info := detectedProviderTestHost(t)
+	goArch, _ := info.GoArchitecture()
+	otherKernel := "linux"
+	if info.Kernel == "linux" {
+		otherKernel = "darwin"
+	}
+	hostFilename := "go1.2.3." + info.Kernel + "-" + goArch + ".tar.gz"
+	otherFilename := "go1.2.3." + otherKernel + "-" + goArch + ".tar.gz"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":"go1.2.3.darwin-%s.pkg","os":"darwin","arch":%q,"kind":"installer"},{"filename":"go1.2.3.linux-%s.tar.gz","os":"linux","arch":%q,"kind":"archive"}]}]`, runtime.GOARCH, runtime.GOARCH, runtime.GOARCH, runtime.GOARCH)
+		_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":%q,"os":%q,"arch":%q,"kind":"archive"},{"filename":%q,"os":%q,"arch":%q,"kind":"archive"}]}]`, hostFilename, info.Kernel, goArch, otherFilename, otherKernel, goArch)
 	}))
 	defer server.Close()
-	implementation := GoProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL}
-	for _, selected := range []string{"missing.pkg", "   ", "go1.2.3.linux-" + runtime.GOARCH + ".tar.gz", " go1.2.3.darwin-" + runtime.GOARCH + ".pkg "} {
+	implementation := GoProvider{Source: NewHTTPSource(server.Client()), Endpoint: server.URL, host: func() runtimeutil.SystemInfo { return info }}
+	for _, selected := range []string{"missing.pkg", "   ", otherFilename, " " + hostFilename + " "} {
 		if _, err := implementation.Download(context.Background(), Request{SelectedArtifact: selected}); err == nil {
 			t.Fatalf("selected file %q was accepted", selected)
 		}
@@ -599,6 +633,13 @@ func TestJetBrainsResponseUsesProductCodeAndRequiresRelease(t *testing.T) {
 }
 
 func TestBuiltinDownloadsUseOfficialMetadataWithoutActions(t *testing.T) {
+	info := detectedProviderTestHost(t)
+	jetBrainsKey, _ := info.JetBrainsPlatformKey()
+	goArch, _ := info.GoArchitecture()
+	nodeFileKey, _ := info.NodeReleaseFileKey()
+	nodePlatform := info.NodeArchivePlatform()
+	nodeArch, _ := info.NodeArchiveArchitecture()
+	goFilename := "go1.2.3." + info.Kernel + "-" + goArch + ".tar.gz"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -611,15 +652,11 @@ func TestBuiltinDownloadsUseOfficialMetadataWithoutActions(t *testing.T) {
 		case "/pypi/pkg":
 			_, _ = fmt.Fprintf(w, `{"info":{"name":"Py__.-Pkg","version":"1.2.3"},"urls":[{"packagetype":"sdist","url":"https://%s/pkg-1.2.3.tar.gz","filename":"pkg-1.2.3.tar.gz"}]}`, r.Host)
 		case "/jetbrains":
-			key := "mac"
-			if runtime.GOARCH == "arm64" {
-				key = "macM1"
-			}
-			_, _ = fmt.Fprintf(w, `{"IIU":[{"version":"1.2.3","downloads":{"%s":{"link":"https://%s/idea.dmg"}}}]}`, key, r.Host)
+			_, _ = fmt.Fprintf(w, `{"IIU":[{"version":"1.2.3","downloads":{"%s":{"link":"https://%s/idea.tar.gz"}}}]}`, jetBrainsKey, r.Host)
 		case "/go":
-			_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":"go1.2.3.darwin-%s.pkg","os":"darwin","arch":"%s","kind":"installer"}]}]`, runtime.GOARCH, runtime.GOARCH)
+			_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":%q,"os":%q,"arch":%q,"kind":"archive"}]}]`, goFilename, info.Kernel, goArch)
 		case "/node/index.json":
-			_, _ = fmt.Fprintf(w, `[{"version":"v1.2.3","lts":"LTS","files":["osx-%s-tar"]}]`, nodeTestDarwinArchiveArch())
+			_, _ = fmt.Fprintf(w, `[{"version":"v1.2.3","lts":"LTS","files":[%q]}]`, nodeFileKey)
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -636,9 +673,9 @@ func TestBuiltinDownloadsUseOfficialMetadataWithoutActions(t *testing.T) {
 		{"github tag", GitHubTagProvider{source, server.URL + "/tag/{package}"}, GitHubTagProvider{source, server.URL + "/tag/{package}"}, Request{App: model.Application{Package: "owner/repo"}}, strings.Replace(server.URL, "http://", "https://", 1) + "/repo-v1.2.3.tar.gz", "v1.2.3"},
 		{"npm", NPMProvider{source, server.URL + "/npm/{package}"}, NPMProvider{source, server.URL + "/npm/{package}"}, Request{App: model.Application{Package: "pkg"}}, strings.Replace(server.URL, "http://", "https://", 1) + "/pkg-1.2.3.tgz", "pkg@1.2.3"},
 		{"pypi", PyPIProvider{source, server.URL + "/pypi/{package}"}, PyPIProvider{source, server.URL + "/pypi/{package}"}, Request{App: model.Application{Package: "pkg"}}, strings.Replace(server.URL, "http://", "https://", 1) + "/pkg-1.2.3.tar.gz", "py-pkg"},
-		{"jetbrains", JetBrainsProvider{Source: source, Endpoint: server.URL + "/jetbrains?code={package}"}, nil, Request{App: model.Application{Package: "IIU"}}, strings.Replace(server.URL, "http://", "https://", 1) + "/idea.dmg", ""},
-		{"go", GoProvider{Source: source, Endpoint: server.URL + "/go"}, nil, Request{}, strings.Replace(server.URL, "http://", "https://", 1) + "/go1.2.3.darwin-" + runtime.GOARCH + ".pkg", ""},
-		{"node", NodeLTSProvider{Source: source, Endpoint: server.URL + "/node/index.json"}, nil, Request{}, strings.Replace(server.URL, "http://", "https://", 1) + "/node/v1.2.3/node-v1.2.3-darwin-" + nodeTestDarwinArchiveArch() + ".tar.gz", ""},
+		{"jetbrains", JetBrainsProvider{Source: source, Endpoint: server.URL + "/jetbrains?code={package}", host: func() runtimeutil.SystemInfo { return info }}, nil, Request{App: model.Application{Package: "IIU"}}, strings.Replace(server.URL, "http://", "https://", 1) + "/idea.tar.gz", ""},
+		{"go", GoProvider{Source: source, Endpoint: server.URL + "/go", host: func() runtimeutil.SystemInfo { return info }}, nil, Request{}, strings.Replace(server.URL, "http://", "https://", 1) + "/" + goFilename, ""},
+		{"node", NodeLTSProvider{Source: source, Endpoint: server.URL + "/node/index.json", host: func() runtimeutil.SystemInfo { return info }}, nil, Request{}, strings.Replace(server.URL, "http://", "https://", 1) + "/node/v1.2.3/node-v1.2.3-" + nodePlatform + "-" + nodeArch + ".tar.gz", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			download, err := test.resolver.Download(context.Background(), test.request)
@@ -646,7 +683,7 @@ func TestBuiltinDownloadsUseOfficialMetadataWithoutActions(t *testing.T) {
 				t.Fatalf("Download() = %#v, %v", download, err)
 			}
 			if test.name == "node" {
-				wantFilename := "node-v1.2.3-darwin-" + nodeTestDarwinArchiveArch() + ".tar.gz"
+				wantFilename := "node-v1.2.3-" + nodePlatform + "-" + nodeArch + ".tar.gz"
 				if download.Filename != wantFilename {
 					t.Fatalf("node filename = %q, want %q", download.Filename, wantFilename)
 				}
@@ -703,13 +740,6 @@ func TestTrustedDownloadURLFailsClosed(t *testing.T) {
 }
 
 func requestHost(rawURL string) string { return strings.TrimPrefix(rawURL, "http://") }
-
-func nodeTestDarwinArchiveArch() string {
-	if runtime.GOARCH == "amd64" {
-		return "x64"
-	}
-	return "arm64"
-}
 
 func TestAutomaticArtifactSelectionUsesNormalizedLinuxSystemInfo(t *testing.T) {
 	ubuntu := runtimeutil.SystemInfo{OS: "linux", Product: "Ubuntu", Architecture: "x86_64"}

@@ -29,6 +29,32 @@ func testChecker(t *testing.T, runner runtimeutil.Runner) *providerResolver {
 	return checker
 }
 
+func detectedTestHost(t *testing.T) runtimeutil.SystemInfo {
+	t.Helper()
+	info, err := runtimeutil.DetectSystemInfo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Supported() {
+		t.Fatalf("unsupported test host: %#v", info)
+	}
+	return info
+}
+
+func testGitHubAssetPlatform(info runtimeutil.SystemInfo) string {
+	if info.Kernel == "darwin" {
+		return "macos"
+	}
+	return info.Kernel
+}
+
+func testGitHubAssetArchitecture(info runtimeutil.SystemInfo) string {
+	if info.Architecture == "x86_64" {
+		return "x64"
+	}
+	return "arm64"
+}
+
 func TestCheckerCheckActionOverridesBuiltInProvider(t *testing.T) {
 	checker := testChecker(t, runtimeutil.Runner{})
 	latest, err := checker.latest(context.Background(), model.Application{Provider: model.ProviderConfig{Type: model.ProviderNPM, Actions: &model.ProviderActions{Check: "printf '2.4.1\\n'"}}}, "1.0.0")
@@ -51,12 +77,14 @@ func TestCheckerRegistersBuiltins(t *testing.T) {
 }
 
 func TestCheckerReturnsGoDownloadCandidates(t *testing.T) {
+	info := detectedTestHost(t)
+	goArch, _ := info.GoArchitecture()
 	files := []string{
-		"go1.2.3.darwin-" + runtime.GOARCH + ".pkg",
-		"go1.2.3.darwin-" + runtime.GOARCH + ".tar.gz",
+		"go1.2.3." + info.Kernel + "-" + goArch + ".tar.gz",
+		"go1.2.3." + info.Kernel + "-" + goArch + ".zip",
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":%q,"os":"darwin","arch":%q,"kind":"archive"},{"filename":%q,"os":"darwin","arch":%q,"kind":"installer"}]}]`, files[1], runtime.GOARCH, files[0], runtime.GOARCH)
+		_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":%q,"os":%q,"arch":%q,"kind":"archive"},{"filename":%q,"os":%q,"arch":%q,"kind":"archive"}]}]`, files[0], info.Kernel, goArch, files[1], info.Kernel, goArch)
 	}))
 	defer server.Close()
 	checker, err := newProviderResolver(runtimeutil.Runner{}, map[string]string{string(model.ProviderGo): server.URL}, nil)
@@ -177,13 +205,12 @@ func TestCheckerLocalizesParameterizedDownloadErrorsInBothLanguages(t *testing.T
 }
 
 func TestCheckerResolvesBuiltinGitHubDownloadWithoutAction(t *testing.T) {
-	arch := "arm64"
-	if runtimeutil.HostPlatform().Architecture == "x86_64" {
-		arch = "x64"
-	}
+	info := detectedTestHost(t)
+	arch := testGitHubAssetArchitecture(info)
+	platform := testGitHubAssetPlatform(info)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"assets":[{"name":"sample-macos-%s.zip","browser_download_url":"https://%s/sample.zip","digest":"sha256:%s"}]}`, arch, request.Host, strings.Repeat("a", 64))
+		_, _ = fmt.Fprintf(w, `{"assets":[{"name":"sample-%s-%s.zip","browser_download_url":"https://%s/sample.zip","digest":"sha256:%s"}]}`, platform, arch, request.Host, strings.Repeat("a", 64))
 	}))
 	defer server.Close()
 	checker, err := newProviderResolver(runtimeutil.Runner{}, map[string]string{string(model.ProviderGitHubRelease): server.URL}, nil)
@@ -236,6 +263,13 @@ func TestCheckerResolvesBuiltinSparkleDownloadWithoutAction(t *testing.T) {
 }
 
 func TestCheckerResolvesOfficialBuiltinDownloadsWithoutActions(t *testing.T) {
+	info := detectedTestHost(t)
+	jetBrainsKey, _ := info.JetBrainsPlatformKey()
+	goArch, _ := info.GoArchitecture()
+	nodeFileKey, _ := info.NodeReleaseFileKey()
+	nodePlatform := info.NodeArchivePlatform()
+	nodeArch, _ := info.NodeArchiveArchitecture()
+	goFilename := "go1.2.3." + info.Kernel + "-" + goArch + ".tar.gz"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
@@ -246,15 +280,11 @@ func TestCheckerResolvesOfficialBuiltinDownloadsWithoutActions(t *testing.T) {
 		case "/pypi/pkg":
 			_, _ = fmt.Fprintf(w, `{"info":{"name":"pkg","version":"1.2.3"},"urls":[{"packagetype":"sdist","url":"https://%s/pkg.tar.gz","filename":"pkg.tar.gz"}]}`, request.Host)
 		case "/jetbrains":
-			key := "mac"
-			if runtime.GOARCH == "arm64" {
-				key = "macM1"
-			}
-			_, _ = fmt.Fprintf(w, `{"IIU":[{"version":"1.2.3","downloads":{"%s":{"link":"https://%s/idea.dmg"}}}]}`, key, request.Host)
+			_, _ = fmt.Fprintf(w, `{"IIU":[{"version":"1.2.3","downloads":{"%s":{"link":"https://%s/idea.tar.gz"}}}]}`, jetBrainsKey, request.Host)
 		case "/go":
-			_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":"go1.2.3.darwin-%s.pkg","os":"darwin","arch":"%s","kind":"installer"}]}]`, runtime.GOARCH, runtime.GOARCH)
+			_, _ = fmt.Fprintf(w, `[{"version":"go1.2.3","stable":true,"files":[{"filename":%q,"os":%q,"arch":%q,"kind":"archive"}]}]`, goFilename, info.Kernel, goArch)
 		case "/node/index.json":
-			_, _ = fmt.Fprintf(w, `[{"version":"v1.2.3","lts":"LTS","files":["osx-%s-tar"]}]`, nodeTestDarwinArchiveArch())
+			_, _ = fmt.Fprintf(w, `[{"version":"v1.2.3","lts":"LTS","files":[%q]}]`, nodeFileKey)
 		default:
 			t.Errorf("unexpected path %q", request.URL.Path)
 		}
@@ -273,9 +303,9 @@ func TestCheckerResolvesOfficialBuiltinDownloadsWithoutActions(t *testing.T) {
 		packageName, want string
 	}{
 		{model.ProviderGitHubTag, "owner/repo", "https://" + strings.TrimPrefix(server.URL, "http://") + "/source.tar.gz"}, {model.ProviderNPM, "pkg", "https://" + strings.TrimPrefix(server.URL, "http://") + "/pkg.tgz"},
-		{model.ProviderPyPI, "pkg", "https://" + strings.TrimPrefix(server.URL, "http://") + "/pkg.tar.gz"}, {model.ProviderJetBrains, "IIU", "https://" + strings.TrimPrefix(server.URL, "http://") + "/idea.dmg"},
-		{model.ProviderGo, "", "https://" + strings.TrimPrefix(server.URL, "http://") + "/go1.2.3.darwin-" + runtime.GOARCH + ".pkg"},
-		{model.ProviderNodeLTS, "", "https://" + strings.TrimPrefix(server.URL, "http://") + "/node/v1.2.3/node-v1.2.3-darwin-" + nodeTestDarwinArchiveArch() + ".tar.gz"},
+		{model.ProviderPyPI, "pkg", "https://" + strings.TrimPrefix(server.URL, "http://") + "/pkg.tar.gz"}, {model.ProviderJetBrains, "IIU", "https://" + strings.TrimPrefix(server.URL, "http://") + "/idea.tar.gz"},
+		{model.ProviderGo, "", "https://" + strings.TrimPrefix(server.URL, "http://") + "/" + goFilename},
+		{model.ProviderNodeLTS, "", "https://" + strings.TrimPrefix(server.URL, "http://") + "/node/v1.2.3/node-v1.2.3-" + nodePlatform + "-" + nodeArch + ".tar.gz"},
 	} {
 		app := model.Application{Provider: model.ProviderConfig{Type: test.provider}, Package: test.packageName}
 		resolved, err := checker.resolveDownload(context.Background(), app, model.ManagedStatus{LatestVersion: "1.2.3"})
@@ -283,13 +313,6 @@ func TestCheckerResolvesOfficialBuiltinDownloadsWithoutActions(t *testing.T) {
 			t.Fatalf("%s ResolveDownload() = %#v, %v", test.provider, resolved, err)
 		}
 	}
-}
-
-func nodeTestDarwinArchiveArch() string {
-	if runtimeutil.HostPlatform().Architecture == "x86_64" {
-		return "x64"
-	}
-	return "arm64"
 }
 
 func TestCheckerLocalizesActionFailureWithoutLosingTypedCause(t *testing.T) {
