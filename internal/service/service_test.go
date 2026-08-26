@@ -53,7 +53,7 @@ func TestClosedBatchUsesLocalizedMessage(t *testing.T) {
 	}
 }
 
-func saveTestConfig(t *testing.T, store *config.Center, value model.Config) {
+func saveTestConfig(t *testing.T, store *config.Center, value model.Config) model.Config {
 	t.Helper()
 	value.Settings.Downloader.CLI = "aria2c"
 	for index := range value.Apps {
@@ -72,6 +72,11 @@ func saveTestConfig(t *testing.T, store *config.Center, value model.Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	saved, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return saved
 }
 
 func testStatus(value model.Config, id string) model.ManagedStatus {
@@ -114,6 +119,9 @@ func TestServicePublicAPIUsesModelScanProgress(t *testing.T) {
 }
 
 func TestDownloadAssetCandidatesFiltersTargetsRejectsUnknownAndHasNoRunSideEffects(t *testing.T) {
+	if _, err := runtimeutil.DetectSystemInfo(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
@@ -610,14 +618,14 @@ func TestSaveScanSnapshotRejectsStaleBase(t *testing.T) {
 	store := testStore(directory)
 	expectedCatalog := scanTestCatalog()
 	expectedCatalog.Settings.Downloader.CLI = "aria2c"
-	saveTestConfig(t, store, expectedCatalog)
+	expectedCatalog = saveTestConfig(t, store, expectedCatalog)
 	changedLanguage := "en"
 	if expectedCatalog.Settings.Language == changedLanguage {
 		changedLanguage = "zh"
 	}
 	current := expectedCatalog
 	current.Settings.Language = changedLanguage
-	saveTestConfig(t, store, current)
+	current = saveTestConfig(t, store, current)
 	proposed := expectedCatalog
 	err := (&Service{config: store}).SaveScanSnapshot(expectedCatalog, proposed)
 	if err == nil {
@@ -637,7 +645,7 @@ func TestSaveScanSnapshotPersistsMatchingBase(t *testing.T) {
 	store := testStore(directory)
 	expectedCatalog := scanTestCatalog()
 	expectedCatalog.Settings.Downloader.CLI = "aria2c"
-	saveTestConfig(t, store, expectedCatalog)
+	expectedCatalog = saveTestConfig(t, store, expectedCatalog)
 	changedLanguage := "en"
 	if expectedCatalog.Settings.Language == changedLanguage {
 		changedLanguage = "zh"
@@ -662,7 +670,7 @@ func TestSaveScanSnapshotMergesConcurrentStatus(t *testing.T) {
 	expected := config.Default()
 	expected.Settings.Downloader.CLI = "aria2c"
 	expected.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), ScanManaged: true, StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
-	saveTestConfig(t, store, expected)
+	expected = saveTestConfig(t, store, expected)
 	concurrent := expected
 	concurrent.Apps = cloneApplications(expected.Apps)
 	concurrent.Apps[0].StatusManaged = model.ManagedStatus{CurrentVersion: "1.0.0", UpdateStatus: model.StatusCurrent}
@@ -687,7 +695,7 @@ func TestSaveScanSnapshotRejectsConcurrentApplicationConfiguration(t *testing.T)
 	store := testStore(directory)
 	expected := config.Default()
 	expected.Apps = []model.Application{{ID: "managed", Name: "Managed", Type: model.ApplicationTypeCLI, InstallPath: "managed", Enabled: true, UpdateMode: model.ModeCheck, Provider: providerConfig(model.ProviderDefault, "", "printf '1.0.0'", "", nil, ""), ScanManaged: true, StatusManaged: model.ManagedStatus{UpdateStatus: model.StatusUnchecked}}}
-	saveTestConfig(t, store, expected)
+	expected = saveTestConfig(t, store, expected)
 	concurrent := expected
 	concurrent.Apps = cloneApplications(expected.Apps)
 	concurrent.Apps[0].Description = "concurrent edit"
