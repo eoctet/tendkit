@@ -1,7 +1,7 @@
 # TendKit
 
 <p align="center">
-  <img src="assets/tendkit-logo.png" alt="TendKit logo" width="720">
+  <img src="assets/tendkit-logo.png" alt="TendKit logo" width="440">
 </p>
 
 > Manage your developer tools in one place. Spot updates early. Stay in control.
@@ -15,7 +15,7 @@ TendKit brings them together in one terminal dashboard. Scan your machine, view 
 TendKit runs locally on macOS and Linux. Its purpose is not to replace your existing package managers, but to give you a simpler way to manage your current development environment.
 
 <p align="center">
-  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="720">
+  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="800">
 </p>
 
 ## ✨ Why TendKit?

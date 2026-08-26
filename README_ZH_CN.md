@@ -1,7 +1,7 @@
 # TendKit
 
 <p align="center">
-  <img src="assets/tendkit-logo.png" alt="TendKit Logo" width="720">
+  <img src="assets/tendkit-logo.png" alt="TendKit Logo" width="440">
 </p>
 
 > 在一个地方管理你的开发工具，及时发现更新，一切由你掌控。
@@ -15,7 +15,7 @@ TendKit 把它们集中到一个终端面板中。扫描本机、查看安装状
 TendKit 在 macOS 和 Linux 本地运行。它的目的不是替代现有包管理器，而是提供更简单的方式让你管理现有开发环境。
 
 <p align="center">
-  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="720">
+  <img src="assets/tendkit-demo.gif" alt="TendKit demo" width="800">
 </p>
 
 ## ✨ 为什么选择 TendKit？
