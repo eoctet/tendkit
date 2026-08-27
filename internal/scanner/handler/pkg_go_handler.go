@@ -15,15 +15,16 @@ import (
 )
 
 type GoHandler struct {
-	runner   Runner
-	lookPath func(string) (string, error)
-	stat     func(string) (os.FileInfo, error)
-	readDir  func(string) ([]os.DirEntry, error)
-	homeDir  func() (string, error)
+	runner       Runner
+	lookPath     func(string) (string, error)
+	stat         func(string) (os.FileInfo, error)
+	evalSymlinks func(string) (string, error)
+	readDir      func(string) ([]os.DirEntry, error)
+	homeDir      func() (string, error)
 }
 
 func NewGo(r Runner) *GoHandler {
-	return &GoHandler{runner: r, lookPath: exec.LookPath, stat: os.Stat, readDir: os.ReadDir, homeDir: os.UserHomeDir}
+	return &GoHandler{runner: r, lookPath: exec.LookPath, stat: os.Stat, evalSymlinks: filepath.EvalSymlinks, readDir: os.ReadDir, homeDir: os.UserHomeDir}
 }
 func (*GoHandler) Domain() Domain { return Go }
 func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
@@ -63,7 +64,15 @@ func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
 				out.Err = e
 				return out
 			}
-			if entry.IsDir() {
+			binary := filepath.Join(dir, entry.Name())
+			protected := h.goManagedOwnerAtPath(r.Configured, binary)
+			// Stat follows valid symlinks, so a linked Go command can provide build
+			// evidence. Broken and non-executable unrelated entries remain ignored.
+			info, infoErr := h.stat(binary)
+			if infoErr != nil || !validEvidenceFile(info) {
+				if protected {
+					out.Complete = false
+				}
 				continue
 			}
 			report(model.ScanStageApplication, entry.Name())
@@ -72,35 +81,61 @@ func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
 				out.Err = e
 				return out
 			}
-			binary := filepath.Join(dir, entry.Name())
 			meta, e := h.runner.Run(ctx, runtimeutil.QuoteShell(goBin)+" version -m "+runtimeutil.QuoteShell(binary), nil)
-			if e != nil {
+			if ectx := ctx.Err(); ectx != nil {
 				out.Complete = false
+				out.Err = ectx
+				return out
+			}
+			if e != nil || meta.ExitCode != 0 {
+				if protected {
+					out.Complete = false
+				}
 				continue
 			}
 			command, module, current := goModule(meta.Stdout)
-			if module == "" {
+			if module == "" || command == "" {
+				if protected {
+					out.Complete = false
+				}
 				continue
-			}
-			if command == "" {
-				command = module
 			}
 			key := strings.ToLower(command)
 			if seen[key] {
+				out.Complete = false
 				continue
 			}
 			seen[key] = true
 			target := metadatautil.PackageTarget{Ecosystem: metadatautil.PackageGo, Manager: goBin, Name: command, InstallPath: binary}
 			versionCommand, _ := metadatautil.PackageVersionCommand(target)
 			updateCommand, _ := metadatautil.PackageUpdateCommand(target)
-			app := model.Application{ID: "pkg-go-" + packageSlug(entry.Name()), Name: entry.Name(), Type: model.ApplicationTypePackage, Description: "Go command provided by " + module, URL: goGitHubURL(module), InstallPath: binary, Enabled: true, UpdateMode: model.ModeAuto, Provider: model.ProviderConfig{Type: model.ProviderDefault, Actions: &model.ProviderActions{Version: versionCommand, Check: runtimeutil.QuoteShell(goBin) + " list -m -f '{{.Version}}' " + runtimeutil.QuoteShell(module+"@latest"), Update: updateCommand}}, Package: command, Identity: model.PackageIdentity("go", command), ScanManaged: true}
-			out.Candidates = append(out.Candidates, Candidate{Application: app, CurrentVersion: version.Normalize(current), Aliases: []string{"go:" + module}})
+			app := model.Application{ID: "pkg-go-" + packageSlug(entry.Name()), Name: entry.Name(), Type: model.ApplicationTypePackage, Description: "Go command provided by " + module, URL: goGitHubURL(module), InstallPath: binary, Enabled: true, UpdateMode: model.ModeAuto, Provider: model.ProviderConfig{Type: model.ProviderDefault, Actions: &model.ProviderActions{Version: versionCommand, Check: runtimeutil.QuoteShell(goBin) + " list -m -f '{{.Version}}' " + runtimeutil.QuoteShell(module+"@latest"), Update: updateCommand}}, Package: command, Identity: model.PackageIdentity(string(h.Domain()), command), ScanManaged: true}
+			out.Candidates = append(out.Candidates, Candidate{Application: app, CurrentVersion: version.Normalize(current), Aliases: []string{"go:" + module}, Evidence: &InstallationEvidence{Source: string(h.Domain()), Package: command, ExecutablePaths: []string{binary}, InstallRoot: dir}})
 		}
 	}
 	if !out.Complete && out.Err == nil {
 		out.Err = &PackageInventoryIncompleteError{Ecosystem: "Go", Message: "incomplete Go inventory"}
 	}
 	return out
+}
+
+func (h *GoHandler) goManagedOwnerAtPath(configured []model.Application, binary string) bool {
+	binary = filepath.Clean(binary)
+	for _, app := range configured {
+		if !app.ScanManaged || !strings.HasPrefix(app.Identity, "package:go:") || strings.TrimSpace(app.InstallPath) == "" {
+			continue
+		}
+		installPath := filepath.Clean(app.InstallPath)
+		if installPath == binary {
+			return true
+		}
+		canonicalInstallPath, installErr := h.evalSymlinks(installPath)
+		canonicalBinary, binaryErr := h.evalSymlinks(binary)
+		if installErr == nil && binaryErr == nil && filepath.Clean(canonicalInstallPath) == filepath.Clean(canonicalBinary) {
+			return true
+		}
+	}
+	return false
 }
 func (h *GoHandler) manager(c []model.Application) string {
 	if p, e := h.lookPath("go"); e == nil {

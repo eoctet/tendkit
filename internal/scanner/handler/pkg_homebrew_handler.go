@@ -34,11 +34,13 @@ type HomebrewCaskHandler struct {
 	host     func() string
 }
 
+// NewHomebrewCask creates a handler for installed Homebrew casks.
 func NewHomebrewCask(r Runner) *HomebrewCaskHandler {
 	return &HomebrewCaskHandler{runner: r, lookPath: exec.LookPath, stat: os.Stat, homeDir: os.UserHomeDir, host: func() string { return runtimeutil.HostPlatform().Kernel }}
 }
 func (*HomebrewCaskHandler) Domain() Domain { return HomebrewCask }
 func (h *HomebrewCaskHandler) Scan(ctx context.Context, request Request) Result {
+	ecosystem := string(h.Domain())
 	if h.host() != "darwin" {
 		return Result{Complete: true}
 	}
@@ -49,48 +51,48 @@ func (h *HomebrewCaskHandler) Scan(ctx context.Context, request Request) Result 
 	reportPackageProgress(request, model.ScanStagePackageList, "Homebrew cask")
 	r, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" list --cask --versions --json", nil)
 	if err != nil || r.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError("homebrew-cask", err, r.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, err, r.ExitCode)}
 	}
 	var inventory homebrewCaskInventory
 	if err := json.Unmarshal([]byte(r.Stdout), &inventory); err != nil || inventory.Casks == nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "invalid Homebrew cask inventory"}}
+		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "invalid Homebrew cask inventory"}}
 	}
 	caskroomResult, caskroomErr := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" --caskroom", nil)
 	if caskroomErr != nil || caskroomResult.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError("homebrew-cask", caskroomErr, caskroomResult.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, caskroomErr, caskroomResult.ExitCode)}
 	}
 	caskroom, pathErr := singleHomebrewPath(caskroomResult.Stdout)
 	if pathErr != nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew Caskroom path is invalid"}}
+		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew Caskroom path is invalid"}}
 	}
 	caskroom, pathErr = filepath.EvalSymlinks(caskroom)
 	if pathErr != nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew Caskroom path is missing"}}
+		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew Caskroom path is missing"}}
 	}
 	result := Result{Complete: true}
 	for _, item := range *inventory.Casks {
 		version, versionErr := activeHomebrewCaskVersion(item)
 		if versionErr != nil || !validHomebrewFormulaPathComponent(item.Token) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "ambiguous Homebrew cask inventory"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "ambiguous Homebrew cask inventory"}}
 		}
 		prefix, pathErr := filepath.EvalSymlinks(filepath.Join(caskroom, item.Token, version))
 		if pathErr != nil || !pathWithinRoot(prefix, caskroom) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew cask prefix is invalid"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew cask prefix is invalid"}}
 		}
 		tap, appNames, receiptErr := homebrewCaskReceipt(caskroom, item.Token)
 		if receiptErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew cask receipt is incomplete"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew cask receipt is incomplete"}}
 		}
 		paths, pathErr := homebrewCaskApplicationPaths(ctx, prefix, appNames)
 		if pathErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew cask application inventory is incomplete"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew cask application inventory is incomplete"}}
 		}
 		if len(paths) == 0 {
 			continue
 		}
 		canonical, nameErr := homebrewInstalledName(item.Token, tap, "homebrew/cask")
 		if nameErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-cask", Message: "Homebrew cask source tap is invalid"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Homebrew cask source tap is invalid"}}
 		}
 		ambiguity := ""
 		mode := model.ModeAuto
@@ -98,14 +100,15 @@ func (h *HomebrewCaskHandler) Scan(ctx context.Context, request Request) Result 
 			ambiguity = "multiple-application-paths"
 		}
 		reportPackageProgress(request, model.ScanStageApplication, canonical)
-		app := model.Application{ID: "pkg-homebrew-cask-" + packageSlug(canonical), Name: canonical, Type: model.ApplicationTypeBundle, InstallPath: paths[0], Enabled: true, UpdateMode: mode, Provider: model.ProviderConfig{Type: model.ProviderHomebrew}, Package: "cask/" + canonical, Identity: model.PackageIdentity("homebrew-cask", canonical), ScanManaged: true}
-		candidate := packageCandidate(app, "", "homebrew-cask:"+canonical)
-		candidate.Evidence = &InstallationEvidence{Source: "homebrew-cask", Package: app.Package, ApplicationPaths: paths, Ambiguity: ambiguity}
+		app := model.Application{ID: "pkg-homebrew-cask-" + packageSlug(canonical), Name: canonical, Type: model.ApplicationTypeBundle, InstallPath: paths[0], Enabled: true, UpdateMode: mode, Provider: model.ProviderConfig{Type: model.ProviderHomebrew}, Package: "cask/" + canonical, Identity: model.PackageIdentity(ecosystem, canonical), ScanManaged: true}
+		candidate := packageCandidate(app, "", ecosystem+":"+canonical)
+		candidate.Evidence = &InstallationEvidence{Source: ecosystem, Package: app.Package, ApplicationPaths: paths, Ambiguity: ambiguity}
 		result.Candidates = append(result.Candidates, candidate)
 	}
 	return result
 }
 
+// NewHomebrewFormula creates a handler for installed Homebrew formulae.
 func NewHomebrewFormula(r Runner) *HomebrewFormulaHandler {
 	return &HomebrewFormulaHandler{runner: r, lookPath: exec.LookPath, stat: os.Stat, homeDir: os.UserHomeDir, host: func() string { return runtimeutil.HostPlatform().Kernel }}
 }
@@ -119,109 +122,141 @@ func (h *HomebrewFormulaHandler) Scan(ctx context.Context, request Request) Resu
 		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "brew"}}
 	}
 	reportPackageProgress(request, model.ScanStagePackageList, "Homebrew formula")
-	r, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" list --formula --versions --json", nil)
-	if err != nil || r.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError("homebrew-formula", err, r.ExitCode)}
-	}
-	if err := ctx.Err(); err != nil {
+	inventory, cellar, err := h.formulaInventory(ctx, brew)
+	if err != nil {
 		return Result{Complete: false, Err: err}
-	}
-	var inventory homebrewFormulaInventory
-	if err := json.Unmarshal([]byte(r.Stdout), &inventory); err != nil || inventory.Formulae == nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "invalid Homebrew formula inventory"}}
-	}
-	cellarResult, cellarErr := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" --cellar", nil)
-	if cellarErr != nil || cellarResult.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError("homebrew-formula", cellarErr, cellarResult.ExitCode)}
-	}
-	if err := ctx.Err(); err != nil {
-		return Result{Complete: false, Err: err}
-	}
-	cellar, cellarParseErr := singleHomebrewPath(cellarResult.Stdout)
-	if cellarParseErr != nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew Cellar path is invalid"}}
-	}
-	cellar, cellarParseErr = filepath.EvalSymlinks(cellar)
-	if cellarParseErr != nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew Cellar path is missing"}}
 	}
 	result := Result{Complete: true}
-	seen := make(map[string]struct{}, len(*inventory.Formulae))
-	for _, item := range *inventory.Formulae {
+	seen := make(map[string]struct{}, len(inventory))
+	for _, item := range inventory {
 		if err := ctx.Err(); err != nil {
 			return Result{Complete: false, Err: err}
 		}
-		rack := item.Name
-		if !validHomebrewFormulaPathComponent(rack) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula name is invalid"}}
+		if !validHomebrewFormulaPathComponent(item.Name) {
+			return Result{Complete: false, Err: h.formulaIncomplete("Homebrew formula name is invalid")}
 		}
-		if _, exists := seen[rack]; exists {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula target is not unique"}}
+		if _, exists := seen[item.Name]; exists {
+			return Result{Complete: false, Err: h.formulaIncomplete("Homebrew formula target is not unique")}
 		}
-		seen[rack] = struct{}{}
-		version, versionErr := activeHomebrewFormulaVersion(item)
-		if versionErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "ambiguous Homebrew formula inventory"}}
-		}
-		pinned, pinnedErr := homebrewFormulaPinned(item)
-		if pinnedErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "invalid Homebrew formula pinned version"}}
-		}
-		rackPath, pathErr := filepath.EvalSymlinks(filepath.Join(cellar, rack))
-		if pathErr != nil || !pathWithinRoot(rackPath, cellar) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula rack is invalid"}}
-		}
-		prefix, pathErr := filepath.EvalSymlinks(filepath.Join(rackPath, version))
-		if pathErr != nil || !pathWithinRoot(prefix, rackPath) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula prefix is invalid"}}
-		}
-		receiptPath, pathErr := filepath.EvalSymlinks(filepath.Join(prefix, "INSTALL_RECEIPT.json"))
-		if pathErr != nil || !pathWithinRoot(receiptPath, prefix) {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula receipt is invalid"}}
-		}
-		receiptInfo, statErr := h.stat(receiptPath)
-		if statErr != nil || !receiptInfo.Mode().IsRegular() {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula receipt is invalid"}}
-		}
-		if err := ctx.Err(); err != nil {
+		seen[item.Name] = struct{}{}
+		candidate, installed, err := h.formulaCandidate(ctx, cellar, item)
+		if err != nil {
 			return Result{Complete: false, Err: err}
 		}
-		receiptRaw, readErr := os.ReadFile(receiptPath)
-		if err := ctx.Err(); err != nil {
-			return Result{Complete: false, Err: err}
-		}
-		var receipt homebrewFormulaReceipt
-		if readErr != nil || json.Unmarshal(receiptRaw, &receipt) != nil || receipt.InstalledOnRequest == nil || receipt.Source == nil || receipt.Source.Tap == nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula receipt is incomplete"}}
-		}
-		if !*receipt.InstalledOnRequest {
+		if !installed {
 			continue
 		}
-		name, nameErr := canonicalHomebrewFormulaName(rack, *receipt.Source.Tap)
-		if nameErr != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula source tap is invalid"}}
-		}
-		reportPackageProgress(request, model.ScanStageApplication, name)
-		paths, walkErr := homebrewFormulaExecutablePaths(ctx, prefix, h.stat)
-		if walkErr != nil {
-			if err := ctx.Err(); err != nil {
-				return Result{Complete: false, Err: err}
-			}
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula executable inventory is incomplete"}}
-		}
-		if len(paths) == 0 {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "homebrew-formula", Message: "Homebrew formula has no executable paths"}}
-		}
-		mode := model.ModeAuto
-		if pinned {
-			mode = model.ModeCheck
-		}
-		app := model.Application{ID: "pkg-homebrew-formula-" + packageSlug(name), Name: name, Type: model.ApplicationTypePackage, InstallPath: paths[0], Enabled: true, UpdateMode: mode, Provider: model.ProviderConfig{Type: model.ProviderHomebrew}, Package: "formula/" + name, Identity: model.PackageIdentity("homebrew-formula", name), ScanManaged: true}
-		candidate := packageCandidate(app, version, "homebrew-formula:"+name)
-		candidate.Evidence = &InstallationEvidence{Source: "homebrew-formula", Package: app.Package, ExecutablePaths: paths, InstallRoot: prefix}
+		reportPackageProgress(request, model.ScanStageApplication, candidate.Application.Name)
 		result.Candidates = append(result.Candidates, candidate)
 	}
 	return result
+}
+
+func (h *HomebrewFormulaHandler) formulaInventory(ctx context.Context, brew string) ([]homebrewFormulaItem, string, error) {
+	ecosystem := string(h.Domain())
+	result, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" list --formula --versions --json", nil)
+	if err != nil || result.ExitCode != 0 {
+		return nil, "", inventoryError(ecosystem, err, result.ExitCode)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	var inventory homebrewFormulaInventory
+	if err := json.Unmarshal([]byte(result.Stdout), &inventory); err != nil || inventory.Formulae == nil {
+		return nil, "", h.formulaIncomplete("invalid Homebrew formula inventory")
+	}
+	cellarResult, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" --cellar", nil)
+	if err != nil || cellarResult.ExitCode != 0 {
+		return nil, "", inventoryError(ecosystem, err, cellarResult.ExitCode)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
+	cellar, err := singleHomebrewPath(cellarResult.Stdout)
+	if err != nil {
+		return nil, "", h.formulaIncomplete("Homebrew Cellar path is invalid")
+	}
+	cellar, err = filepath.EvalSymlinks(cellar)
+	if err != nil {
+		return nil, "", h.formulaIncomplete("Homebrew Cellar path is missing")
+	}
+	return *inventory.Formulae, cellar, nil
+}
+
+func (h *HomebrewFormulaHandler) formulaCandidate(ctx context.Context, cellar string, item homebrewFormulaItem) (Candidate, bool, error) {
+	version, err := activeHomebrewFormulaVersion(item)
+	if err != nil {
+		return Candidate{}, false, h.formulaIncomplete("ambiguous Homebrew formula inventory")
+	}
+	pinned, err := homebrewFormulaPinned(item)
+	if err != nil {
+		return Candidate{}, false, h.formulaIncomplete("invalid Homebrew formula pinned version")
+	}
+	rackPath, err := filepath.EvalSymlinks(filepath.Join(cellar, item.Name))
+	if err != nil || !pathWithinRoot(rackPath, cellar) {
+		return Candidate{}, false, h.formulaIncomplete("Homebrew formula rack is invalid")
+	}
+	prefix, err := filepath.EvalSymlinks(filepath.Join(rackPath, version))
+	if err != nil || !pathWithinRoot(prefix, rackPath) {
+		return Candidate{}, false, h.formulaIncomplete("Homebrew formula prefix is invalid")
+	}
+	receipt, err := h.formulaReceipt(ctx, prefix)
+	if err != nil {
+		return Candidate{}, false, err
+	}
+	if !*receipt.InstalledOnRequest {
+		return Candidate{}, false, nil
+	}
+	name, err := canonicalHomebrewFormulaName(item.Name, *receipt.Source.Tap)
+	if err != nil {
+		return Candidate{}, false, h.formulaIncomplete("Homebrew formula source tap is invalid")
+	}
+	paths, err := homebrewFormulaExecutablePaths(ctx, prefix, h.stat)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return Candidate{}, false, ctxErr
+		}
+		return Candidate{}, false, h.formulaIncomplete("Homebrew formula executable inventory is incomplete")
+	}
+	if len(paths) == 0 {
+		return Candidate{}, false, h.formulaIncomplete("Homebrew formula has no executable paths")
+	}
+	mode := model.ModeAuto
+	if pinned {
+		mode = model.ModeCheck
+	}
+	ecosystem := string(h.Domain())
+	app := model.Application{ID: "pkg-homebrew-formula-" + packageSlug(name), Name: name, Type: model.ApplicationTypePackage, InstallPath: paths[0], Enabled: true, UpdateMode: mode, Provider: model.ProviderConfig{Type: model.ProviderHomebrew}, Package: "formula/" + name, Identity: model.PackageIdentity(ecosystem, name), ScanManaged: true}
+	candidate := packageCandidate(app, version, ecosystem+":"+name)
+	candidate.Evidence = &InstallationEvidence{Source: ecosystem, Package: app.Package, ExecutablePaths: paths, InstallRoot: prefix}
+	return candidate, true, nil
+}
+
+func (h *HomebrewFormulaHandler) formulaReceipt(ctx context.Context, prefix string) (homebrewFormulaReceipt, error) {
+	receiptPath, err := filepath.EvalSymlinks(filepath.Join(prefix, "INSTALL_RECEIPT.json"))
+	if err != nil || !pathWithinRoot(receiptPath, prefix) {
+		return homebrewFormulaReceipt{}, h.formulaIncomplete("Homebrew formula receipt is invalid")
+	}
+	receiptInfo, err := h.stat(receiptPath)
+	if err != nil || !receiptInfo.Mode().IsRegular() {
+		return homebrewFormulaReceipt{}, h.formulaIncomplete("Homebrew formula receipt is invalid")
+	}
+	if err := ctx.Err(); err != nil {
+		return homebrewFormulaReceipt{}, err
+	}
+	receiptRaw, readErr := os.ReadFile(receiptPath)
+	if err := ctx.Err(); err != nil {
+		return homebrewFormulaReceipt{}, err
+	}
+	var receipt homebrewFormulaReceipt
+	if readErr != nil || json.Unmarshal(receiptRaw, &receipt) != nil || receipt.InstalledOnRequest == nil || receipt.Source == nil || receipt.Source.Tap == nil {
+		return homebrewFormulaReceipt{}, h.formulaIncomplete("Homebrew formula receipt is incomplete")
+	}
+	return receipt, nil
+}
+
+func (h *HomebrewFormulaHandler) formulaIncomplete(message string) error {
+	return &PackageInventoryIncompleteError{Ecosystem: string(h.Domain()), Message: message}
 }
 
 type homebrewFormulaInventory struct {

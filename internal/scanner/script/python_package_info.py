@@ -43,16 +43,42 @@ result = {}
 def record(name, path):
     path = os.path.realpath(path)
     try:
-        scope_path = os.path.realpath(str(metadata.distribution(name).locate_file("")))
+        dist = metadata.distribution(name)
+        scope_path = os.path.realpath(str(dist.locate_file("")))
     except Exception:
-        scope_path = path
+        result[name] = {"path": path, "scope": "unknown", "executables": [], "complete": False}
+        return
     if any(within(scope_path, root) for root in user_sites):
         scope = "user"
     elif any(within(scope_path, root) for root in system_sites):
         scope = "system"
     else:
         scope = "unknown"
-    result[name] = {"path": path, "scope": scope}
+    scripts = (
+        sysconfig.get_path("scripts", "posix_user")
+        if scope == "user"
+        else sysconfig.get_path("scripts")
+    )
+    executables = []
+    entries = [entry for entry in dist.entry_points if entry.group == "console_scripts"]
+    # A distribution without console scripts is a complete pure-library result,
+    # even when its install scope cannot be determined. Scope is only required
+    # when we need it to derive a scripts directory for executable evidence.
+    complete = not entries or (
+        scope in ("user", "system") and scripts and os.path.isabs(scripts)
+    )
+    names = set()
+    for entry in entries:
+        if not entry.name or os.path.basename(entry.name) != entry.name or entry.name in (".", "..") or entry.name in names:
+            complete = False
+            continue
+        names.add(entry.name)
+        wrapper = os.path.join(scripts, entry.name)
+        if not os.path.isfile(wrapper):
+            complete = False
+            continue
+        executables.append(os.path.realpath(wrapper))
+    result[name] = {"path": path, "scope": scope, "executables": sorted(executables), "complete": bool(complete)}
 
 
 distributions = {}

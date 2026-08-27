@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -35,8 +37,10 @@ const (
 )
 
 type pythonPackageInstallInfo struct {
-	Path  string              `json:"path"`
-	Scope packageInstallScope `json:"scope"`
+	Path        string              `json:"path"`
+	Scope       packageInstallScope `json:"scope"`
+	Executables []string            `json:"executables"`
+	Complete    *bool               `json:"complete"`
 }
 
 func NewPython(r Runner) *PythonHandler {
@@ -88,7 +92,7 @@ func (h *PythonHandler) Scan(ctx context.Context, request Request) Result {
 		}
 		key := packageKey(item.Name)
 		installation := installed[key]
-		if strings.TrimSpace(installation.Path) == "" {
+		if strings.TrimSpace(installation.Path) == "" || installation.Complete == nil || !*installation.Complete {
 			result.Complete = false
 			continue
 		}
@@ -99,9 +103,18 @@ func (h *PythonHandler) Scan(ctx context.Context, request Request) Result {
 			Type: model.ApplicationTypePackage, Description: info.Description, URL: info.URL,
 			InstallPath: installation.Path, Enabled: true, UpdateMode: mode,
 			Provider: packageProvider(model.ProviderPyPI, pipVersionCommand(python, item.Name), update),
-			Package:  item.Name, Identity: model.PackageIdentity("python", item.Name), ScanManaged: true,
+			Package:  item.Name, Identity: model.PackageIdentity(string(h.Domain()), item.Name), ScanManaged: true,
 		}
-		result.Candidates = append(result.Candidates, packageCandidate(app, item.Version, "python:"+item.Name))
+		candidate := packageCandidate(app, item.Version, "python:"+item.Name)
+		if len(installation.Executables) > 0 {
+			paths, valid := executableEvidencePaths(installation.Executables, h.stat)
+			if !valid {
+				result.Complete = false
+				continue
+			}
+			candidate.Evidence = &InstallationEvidence{Source: string(h.Domain()), Package: item.Name, ExecutablePaths: paths, InstallRoot: installation.Path}
+		}
+		result.Candidates = append(result.Candidates, candidate)
 	}
 	if !result.Complete && result.Err == nil {
 		result.Err = &PackageInventoryIncompleteError{Ecosystem: "Python", Message: "incomplete Python package inventory"}
@@ -233,7 +246,10 @@ func (h *PythonHandler) installInfo(ctx context.Context, python string, names []
 			continue
 		}
 		var chunk map[string]pythonPackageInstallInfo
-		if json.Unmarshal([]byte(result.Stdout), &chunk) != nil {
+		decoder := json.NewDecoder(bytes.NewBufferString(result.Stdout))
+		decoder.DisallowUnknownFields()
+		var extra any
+		if decoder.Decode(&chunk) != nil || decoder.Decode(&extra) != io.EOF {
 			continue
 		}
 		for name, info := range chunk {
@@ -243,6 +259,9 @@ func (h *PythonHandler) installInfo(ctx context.Context, python string, names []
 			}
 			if info.Scope != packageInstallScopeUser && info.Scope != packageInstallScopeSystem {
 				info.Scope = packageInstallScopeUnknown
+			}
+			for index := range info.Executables {
+				info.Executables[index] = strings.TrimSpace(info.Executables[index])
 			}
 			installed[packageKey(name)] = info
 		}

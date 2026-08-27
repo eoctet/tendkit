@@ -24,17 +24,6 @@ type ecosystemScanResult struct {
 	Err         error
 }
 
-const (
-	packageEcosystemPython          = "python"
-	packageEcosystemNode            = "node"
-	packageEcosystemGo              = "go"
-	packageEcosystemUV              = "uv"
-	packageEcosystemRuby            = "ruby"
-	packageEcosystemHomebrewFormula = "homebrew-formula"
-	packageEcosystemHomebrewCask    = "homebrew-cask"
-	packageEcosystemCargo           = "cargo"
-)
-
 // scanPackages runs enabled ecosystems in stable order and records each result
 // even when another ecosystem is unavailable or incomplete.
 func scanPackages(ctx context.Context, settings model.PackageScanSettings, runner runtimeutil.Runner, exclusions exclusionMatcher, configured []model.Application, progress func(string, string)) packageScanResult {
@@ -47,27 +36,26 @@ func scanPackages(ctx context.Context, settings model.PackageScanSettings, runne
 		}
 	}
 	type configuredHandler struct {
-		enabled   bool
-		ecosystem string
-		label     string
-		handler   handler.Handler
+		enabled bool
+		label   string
+		handler handler.Handler
 	}
 	handlers := []configuredHandler{
-		{settings.Python, packageEcosystemPython, "Python", handler.NewPython(runner)},
-		{settings.Node, packageEcosystemNode, "Node.js", handler.NewNode(runner)},
-		{settings.Go, packageEcosystemGo, "Go", handler.NewGo(runner)},
-		{settings.UV, packageEcosystemUV, "uv", handler.NewUV(runner)},
-		{settings.Ruby, packageEcosystemRuby, "Ruby", handler.NewRuby(runner)},
-		{settings.HomebrewFormula, packageEcosystemHomebrewFormula, "Homebrew formula", handler.NewHomebrewFormula(runner)},
-		{settings.HomebrewCask, packageEcosystemHomebrewCask, "Homebrew cask", handler.NewHomebrewCask(runner)},
-		{settings.Cargo, packageEcosystemCargo, "Cargo", handler.NewCargo(runner)},
+		{settings.Python, "Python", handler.NewPython(runner)},
+		{settings.Node, "Node.js", handler.NewNode(runner)},
+		{settings.Go, "Go", handler.NewGo(runner)},
+		{settings.UV, "uv", handler.NewUV(runner)},
+		{settings.Ruby, "Ruby", handler.NewRuby(runner)},
+		{settings.HomebrewFormula, "Homebrew formula", handler.NewHomebrewFormula(runner)},
+		{settings.HomebrewCask, "Homebrew cask", handler.NewHomebrewCask(runner)},
+		{settings.Cargo, "Cargo", handler.NewCargo(runner)},
 	}
 	for _, item := range handlers {
 		if !item.enabled || ctx.Err() != nil {
 			continue
 		}
 		reportPackageManager(progress, item.label)
-		appendResult(item.ecosystem, packageHandlerResult(
+		appendResult(string(item.handler.Domain()), packageHandlerResult(
 			item.handler.Scan(ctx, packageHandlerRequest(configured, progress)), exclusions,
 		))
 	}

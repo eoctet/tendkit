@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// Dependencies supplies the read-only process and filesystem inputs used to
+// resolve a Cargo install root. Nil functions use their os package defaults.
 type Dependencies struct {
 	Getwd       func() (string, error)
 	ReadFile    func(string) ([]byte, error)

@@ -95,11 +95,11 @@ func identity(app model.Application) string {
 	if app.Package != "" {
 		switch app.Provider.Type {
 		case model.ProviderNPM:
-			return model.PackageIdentity("node", app.Package)
+			return model.PackageIdentity(string(Node), app.Package)
 		case model.ProviderPyPI:
-			return model.PackageIdentity("python", app.Package)
+			return model.PackageIdentity(string(Python), app.Package)
 		case model.ProviderGo:
-			return model.PackageIdentity("go", app.Package)
+			return model.PackageIdentity(string(Go), app.Package)
 		}
 	}
 	return "cli:" + model.NormalizeIdentityName(app.Name)

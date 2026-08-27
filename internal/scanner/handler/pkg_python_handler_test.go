@@ -24,10 +24,21 @@ func (r *pythonRunner) Run(ctx context.Context, command string, _ map[string]str
 	return r.run(ctx, command)
 }
 
-type fixtureFileInfo struct{ dir bool }
+type fixtureFileInfo struct {
+	dir  bool
+	mode fs.FileMode
+}
 
-func (fixtureFileInfo) Name() string       { return "python3" }
-func (fixtureFileInfo) Mode() fs.FileMode  { return 0 }
+func (fixtureFileInfo) Name() string { return "python3" }
+func (f fixtureFileInfo) Mode() fs.FileMode {
+	if f.dir {
+		return fs.ModeDir | 0o755
+	}
+	if f.mode != 0 {
+		return f.mode
+	}
+	return 0o755
+}
 func (f fixtureFileInfo) IsDir() bool      { return f.dir }
 func (fixtureFileInfo) ModTime() time.Time { return time.Time{} }
 func (fixtureFileInfo) Size() int64        { return 0 }
@@ -55,7 +66,7 @@ func TestPythonHandlerGoldenCandidate(t *testing.T) {
 		case strings.Contains(command, "pip show"):
 			return runtimeutil.Result{Stdout: "Name: Example_Package\nSummary: Fixture package\nHome-page: https://example.invalid\nProject-URL: Source, https://github.com/acme/example.git\n"}, nil
 		case strings.Contains(command, "importlib.metadata"):
-			return runtimeutil.Result{Stdout: `{"Example_Package":{"path":" /fixture/site-packages ","scope":"user"}}`}, nil
+			return runtimeutil.Result{Stdout: `{"Example_Package":{"path":" /fixture/site-packages ","scope":"user","executables":["/fixture/bin/example"],"complete":true}}`}, nil
 		default:
 			t.Fatalf("unexpected command: %s", command)
 			return runtimeutil.Result{}, nil
@@ -74,6 +85,9 @@ func TestPythonHandlerGoldenCandidate(t *testing.T) {
 	}
 	if app.Description != "Fixture package" || app.URL != "https://github.com/acme/example" || app.InstallPath != "/fixture/site-packages" || app.UpdateMode != model.ModeAuto || !strings.Contains(app.Provider.VersionAction(), "importlib.metadata") || !strings.Contains(app.Provider.UpdateAction(), "--user") || !strings.Contains(app.Provider.UpdateAction(), "--upgrade") || !slices.Equal(candidate.Aliases, []string{"python:Example_Package"}) {
 		t.Fatalf("golden application = %#v", app)
+	}
+	if candidate.Evidence == nil || candidate.Evidence.Source != "python" || !slices.Equal(candidate.Evidence.ExecutablePaths, []string{"/fixture/bin/example"}) {
+		t.Fatalf("evidence=%#v", candidate.Evidence)
 	}
 	if want := []Progress{{model.ScanStagePackageList, "Python"}, {model.ScanStagePackageMetadata, "Python 1/1"}, {model.ScanStagePackagePaths, "Python 1/1"}, {model.ScanStageApplication, "Example_Package"}}; !slices.Equal(progress, want) {
 		t.Fatalf("progress = %#v", progress)
@@ -130,7 +144,7 @@ func TestPythonHandlerIncompleteAndInvalidListingPaths(t *testing.T) {
 				if strings.Contains(command, "pip show") {
 					return runtimeutil.Result{}, errors.New("optional")
 				}
-				return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system"}}`}, nil
+				return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system","complete":true}}`}, nil
 			}}
 			result := newPython(runner, "/fixture/python3").Scan(context.Background(), Request{})
 			if result.Complete || result.Err == nil || !strings.Contains(result.Err.Error(), test.want) {
@@ -149,11 +163,27 @@ func TestPythonHandlerOptionalMetadataMissingPathsUnknownScopeAndCancellation(t 
 			case strings.Contains(command, "pip show"):
 				return runtimeutil.Result{}, errors.New("metadata unavailable")
 			default:
-				return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"unexpected"}}`}, nil
+				return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"unexpected","complete":true}}`}, nil
 			}
 		}}
 		result := newPython(runner, "/fixture/python3").Scan(context.Background(), Request{})
 		if !result.Complete || len(result.Candidates) != 1 || result.Candidates[0].Application.UpdateMode != model.ModeCheck || result.Candidates[0].Application.Provider.UpdateAction() != "" {
+			t.Fatalf("result=%#v", result)
+		}
+	})
+	t.Run("unknown scope pure library is a complete check-only candidate", func(t *testing.T) {
+		runner := &pythonRunner{run: func(_ context.Context, command string) (runtimeutil.Result, error) {
+			switch {
+			case strings.Contains(command, "pip list"):
+				return runtimeutil.Result{Stdout: `[{"name":"library","version":"1.0.0"}]`}, nil
+			case strings.Contains(command, "pip show"):
+				return runtimeutil.Result{}, nil
+			default:
+				return runtimeutil.Result{Stdout: `{"library":{"path":"/fixture/library","scope":"unknown","executables":[],"complete":true}}`}, nil
+			}
+		}}
+		result := newPython(runner, "/fixture/python3").Scan(context.Background(), Request{})
+		if !result.Complete || len(result.Candidates) != 1 || result.Candidates[0].Evidence != nil || result.Candidates[0].Application.UpdateMode != model.ModeCheck {
 			t.Fatalf("result=%#v", result)
 		}
 	})
@@ -165,7 +195,7 @@ func TestPythonHandlerOptionalMetadataMissingPathsUnknownScopeAndCancellation(t 
 			if strings.Contains(command, "pip show") {
 				return runtimeutil.Result{}, nil
 			}
-			return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system"}}`}, nil
+			return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system","complete":true}}`}, nil
 		}}
 		result := newPython(runner, "/fixture/python3").Scan(context.Background(), Request{})
 		if result.Complete || len(result.Candidates) != 1 || result.Err == nil {
@@ -181,7 +211,7 @@ func TestPythonHandlerOptionalMetadataMissingPathsUnknownScopeAndCancellation(t 
 			if strings.Contains(command, "pip show") {
 				return runtimeutil.Result{}, nil
 			}
-			return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system"},"two":{"path":"/fixture/two","scope":"system"}}`}, nil
+			return runtimeutil.Result{Stdout: `{"one":{"path":"/fixture/one","scope":"system","complete":true},"two":{"path":"/fixture/two","scope":"system","complete":true}}`}, nil
 		}}
 		result := newPython(runner, "/fixture/python3").Scan(ctx, Request{Report: func(value Progress) {
 			if value.Stage == model.ScanStageApplication && value.Subject == "two" {
@@ -192,6 +222,30 @@ func TestPythonHandlerOptionalMetadataMissingPathsUnknownScopeAndCancellation(t 
 			t.Fatalf("result=%#v", result)
 		}
 	})
+}
+
+func TestPythonHandlerRejectsNonStrictInstallInfoChunks(t *testing.T) {
+	for _, output := range []string{
+		`{"one":{"path":"/fixture/one","scope":"system","complete":true,"unknown":true}}`,
+		`{"one":{"path":"/fixture/one","scope":"system","complete":true}} {}`,
+	} {
+		t.Run(output, func(t *testing.T) {
+			runner := &pythonRunner{run: func(_ context.Context, command string) (runtimeutil.Result, error) {
+				switch {
+				case strings.Contains(command, "pip list"):
+					return runtimeutil.Result{Stdout: `[{"name":"one","version":"1"}]`}, nil
+				case strings.Contains(command, "pip show"):
+					return runtimeutil.Result{}, nil
+				default:
+					return runtimeutil.Result{Stdout: output}, nil
+				}
+			}}
+			result := newPython(runner, "/fixture/python3").Scan(context.Background(), Request{})
+			if result.Complete || len(result.Candidates) != 0 || result.Err == nil {
+				t.Fatalf("malformed install-info chunk accepted: %#v", result)
+			}
+		})
+	}
 }
 
 func TestPythonHandlerChunksFiftyPackagesAndParsesGitHubShow(t *testing.T) {
@@ -211,7 +265,7 @@ func TestPythonHandlerChunksFiftyPackagesAndParsesGitHubShow(t *testing.T) {
 			values := make([]string, 0, 51)
 			for _, name := range names {
 				if strings.Contains(command, name) {
-					values = append(values, fmt.Sprintf(`%q:{"path":"/fixture/%s","scope":"system"}`, name, name))
+					values = append(values, fmt.Sprintf(`%q:{"path":"/fixture/%s","scope":"system","complete":true}`, name, name))
 				}
 			}
 			return runtimeutil.Result{Stdout: "{" + strings.Join(values, ",") + "}"}, nil

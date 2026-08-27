@@ -86,6 +86,19 @@ func TestCargoCurrentRunnerFailuresRemainTyped(t *testing.T) {
 	}
 }
 
+func TestCargoCurrentExitIncludesExitCode(t *testing.T) {
+	root, path := cargoFixture(t)
+	runner := &recordingProviderRunner{responses: []providerRunnerResponse{{result: runtimeutil.Result{ExitCode: 23}}}}
+	_, err := cargoProvider(runner).Current(context.Background(), cargoRequest(root, path))
+	var typed *Error
+	if !errors.As(err, &typed) || typed.Key != "provider.cargo_current_exit" {
+		t.Fatalf("error=%#v", err)
+	}
+	if !slices.Equal(typed.Args, []any{"Sample", 23}) {
+		t.Fatalf("args=%#v", typed.Args)
+	}
+}
+
 func TestCargoCurrentFailsClosedForWrongBinaryOrRoot(t *testing.T) {
 	root, path := cargoFixture(t)
 	tests := []struct {

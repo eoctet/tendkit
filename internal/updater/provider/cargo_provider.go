@@ -46,7 +46,7 @@ func (p CargoProvider) current(ctx context.Context, request Request, manager str
 		return "", p.error(request, capability, "provider.cargo_current_failed", err)
 	}
 	if r.ExitCode != 0 {
-		return "", p.error(request, capability, "provider.cargo_current_exit", fmt.Errorf("exit %d", r.ExitCode))
+		return "", p.error(request, capability, "provider.cargo_current_exit", fmt.Errorf("exit %d", r.ExitCode), r.ExitCode)
 	}
 	current, binaries, err := parseCargoInstalledBinaries(r.Combined(), name)
 	if err != nil {
@@ -95,8 +95,9 @@ func verifyCargoBinaryPaths(installPath, binaryRoot string, binaries []string) e
 func (p CargoProvider) installRoot(request Request) (string, error) {
 	return cargoroot.InstallRoot(request.App.Environment, cargoroot.Dependencies{Getwd: p.cwd, ReadFile: p.readFile, UserHomeDir: p.homeDir})
 }
-func (p CargoProvider) error(request Request, capability Capability, key string, cause error) error {
-	return &Error{Key: key, Args: []any{request.App.Name}, Provider: string(model.ProviderCargo), Capability: capability, Cause: cause}
+func (p CargoProvider) error(request Request, capability Capability, key string, cause error, details ...any) error {
+	args := append([]any{request.App.Name}, details...)
+	return &Error{Key: key, Args: args, Provider: string(model.ProviderCargo), Capability: capability, Cause: cause}
 }
 
 var cargoInstalledLine = regexp.MustCompile(`(?m)^([^\s]+)\s+v([^\s:]+):\s*$`)

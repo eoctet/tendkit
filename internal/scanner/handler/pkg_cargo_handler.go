@@ -27,6 +27,7 @@ type CargoHandler struct {
 	getenv   func(string) string
 }
 
+// NewCargo creates a handler for binaries installed by the selected Cargo instance.
 func NewCargo(r Runner) *CargoHandler {
 	return &CargoHandler{runner: r, lookPath: exec.LookPath, stat: os.Stat, homeDir: os.UserHomeDir, cwd: os.Getwd, readFile: os.ReadFile, getenv: os.Getenv}
 }
@@ -35,6 +36,7 @@ func (*CargoHandler) Domain() Domain { return Cargo }
 var cargoInventoryHeader = regexp.MustCompile(`(?m)^([^\s]+)\s+v([^\s:]+):\s*$`)
 
 func (h *CargoHandler) Scan(ctx context.Context, request Request) Result {
+	ecosystem := string(h.Domain())
 	cargo := h.manager(request.Configured)
 	if cargo == "" {
 		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "cargo"}}
@@ -45,23 +47,23 @@ func (h *CargoHandler) Scan(ctx context.Context, request Request) Result {
 	}
 	root := h.cargoInstallRoot(request.Configured)
 	if root == "" {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "cargo", Message: "Cargo install root unavailable"}}
+		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Cargo install root unavailable"}}
 	}
 	environment := h.executionEnvironment(cargo, root)
 	reportPackageProgress(request, model.ScanStagePackageList, "Cargo")
 	r, err := h.runner.Run(ctx, runtimeutil.QuoteShell(cargo)+" install --list --root "+runtimeutil.QuoteShell(root), environment)
 	if err != nil || r.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError("cargo", err, r.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, err, r.ExitCode)}
 	}
 	entries, parseErr := parseCargoInstallList(r.Stdout)
 	if parseErr != nil {
-		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "cargo", Message: "invalid Cargo install inventory"}}
+		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "invalid Cargo install inventory"}}
 	}
 	canonicalBinaryRoot := ""
 	if len(entries) > 0 {
 		canonicalBinaryRoot, err = filepath.EvalSymlinks(filepath.Join(root, "bin"))
 		if err != nil {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "cargo", Message: "Cargo binary root is missing"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Cargo binary root is missing"}}
 		}
 	}
 	result := Result{Complete: true}
@@ -69,23 +71,23 @@ func (h *CargoHandler) Scan(ctx context.Context, request Request) Result {
 		name, current := entry.name, entry.version
 		reportPackageProgress(request, model.ScanStageApplication, name)
 		if len(entry.binaries) == 0 {
-			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "cargo", Message: "Cargo crate has no binary evidence"}}
+			return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Cargo crate has no binary evidence"}}
 		}
 		sort.Strings(entry.binaries)
 		path := filepath.Join(root, "bin", entry.binaries[0])
-		app := model.Application{ID: "pkg-cargo-" + packageSlug(name), Name: name, Type: model.ApplicationTypePackage, InstallPath: path, Enabled: false, UpdateMode: model.ModeCheck, Provider: model.ProviderConfig{Type: model.ProviderCargo}, Package: name, Identity: model.PackageIdentity("cargo", name), ScanManaged: true, Environment: environment}
+		app := model.Application{ID: "pkg-cargo-" + packageSlug(name), Name: name, Type: model.ApplicationTypePackage, InstallPath: path, Enabled: false, UpdateMode: model.ModeCheck, Provider: model.ProviderConfig{Type: model.ProviderCargo}, Package: name, Identity: model.PackageIdentity(string(h.Domain()), name), ScanManaged: true, Environment: environment}
 		paths := make([]string, 0, len(entry.binaries))
 		for _, binary := range entry.binaries {
 			owned, err := filepath.EvalSymlinks(filepath.Join(root, "bin", binary))
 			if err != nil || !pathWithinRoot(owned, canonicalBinaryRoot) {
-				return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: "cargo", Message: "Cargo binary path is outside install root"}}
+				return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Cargo binary path is outside install root"}}
 			}
 			paths = append(paths, owned)
 		}
 		path = paths[0]
 		app.InstallPath = path
-		candidate := packageCandidate(app, current, "cargo:"+name)
-		candidate.Evidence = &InstallationEvidence{Source: "cargo", Package: name, ExecutablePaths: paths, InstallRoot: root}
+		candidate := packageCandidate(app, current, ecosystem+":"+name)
+		candidate.Evidence = &InstallationEvidence{Source: ecosystem, Package: name, ExecutablePaths: paths, InstallRoot: root}
 		result.Candidates = append(result.Candidates, candidate)
 	}
 	return result
@@ -152,7 +154,7 @@ func (h *CargoHandler) manager(configured []model.Application) string {
 func (h *CargoHandler) cargoInstallRoot(configured []model.Application) string {
 	environment := map[string]string{}
 	for _, app := range configured {
-		if app.Provider.Type != model.ProviderCargo && !strings.EqualFold(app.ID, "cargo") && !strings.EqualFold(app.Name, "cargo") || app.Environment == nil {
+		if (app.Provider.Type != model.ProviderCargo && !strings.EqualFold(app.ID, "cargo") && !strings.EqualFold(app.Name, "cargo")) || app.Environment == nil {
 			continue
 		}
 		for _, key := range []string{"CARGO_INSTALL_ROOT", "CARGO_HOME"} {

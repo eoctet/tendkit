@@ -113,13 +113,13 @@ func (p HomebrewProvider) Latest(ctx context.Context, request Request) (string, 
 		return "", p.error(request, CapabilityLatest, "provider.homebrew_parse_failed", parseErr)
 	}
 	if result.ExitCode != 0 && !found {
-		return "", p.error(request, CapabilityLatest, "provider.homebrew_latest_exit", fmt.Errorf("exit %d", result.ExitCode))
+		return "", p.error(request, CapabilityLatest, "provider.homebrew_latest_exit", fmt.Errorf("exit %d", result.ExitCode), result.ExitCode)
 	}
 	if !found {
 		return base.current, nil
 	}
 	if result.ExitCode != 0 && latest == "" {
-		return "", p.error(request, CapabilityLatest, "provider.homebrew_latest_exit", fmt.Errorf("exit %d", result.ExitCode))
+		return "", p.error(request, CapabilityLatest, "provider.homebrew_latest_exit", fmt.Errorf("exit %d", result.ExitCode), result.ExitCode)
 	}
 	if latest == "" {
 		return "", p.error(request, CapabilityLatest, "provider.homebrew_parse_failed", errors.New("latest version is empty"))
@@ -146,7 +146,8 @@ func (p HomebrewProvider) Update(ctx context.Context, request Request) error {
 		return p.error(request, CapabilityUpdate, "provider.homebrew_update_failed", err)
 	}
 	if result.ExitCode != 0 {
-		return p.error(request, CapabilityUpdate, "provider.homebrew_update_exit", fmt.Errorf("exit %d: %s", result.ExitCode, strings.TrimSpace(result.Combined())))
+		output := strings.TrimSpace(result.Combined())
+		return p.error(request, CapabilityUpdate, "provider.homebrew_update_exit", fmt.Errorf("exit %d: %s", result.ExitCode, output), result.ExitCode, output)
 	}
 	return nil
 }
@@ -166,7 +167,7 @@ func (p HomebrewProvider) target(ctx context.Context, request Request, manager s
 		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_failed", err)
 	}
 	if result.ExitCode != 0 {
-		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", result.ExitCode))
+		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", result.ExitCode), result.ExitCode)
 	}
 	if kind == "cask" {
 		target, token, err := parseHomebrewFastCask(result.Stdout, name)
@@ -178,7 +179,7 @@ func (p HomebrewProvider) target(ctx context.Context, request Request, manager s
 			return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_failed", rootErr)
 		}
 		if rootResult.ExitCode != 0 {
-			return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", rootResult.ExitCode))
+			return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", rootResult.ExitCode), rootResult.ExitCode)
 		}
 		root, err := parseHomebrewPrefix(rootResult.Stdout)
 		if err != nil {
@@ -199,7 +200,7 @@ func (p HomebrewProvider) target(ctx context.Context, request Request, manager s
 		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_failed", prefixErr)
 	}
 	if prefixResult.ExitCode != 0 {
-		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", prefixResult.ExitCode))
+		return homebrewTarget{}, p.error(request, capability, "provider.homebrew_current_exit", fmt.Errorf("exit %d", prefixResult.ExitCode), prefixResult.ExitCode)
 	}
 	prefix, prefixParseErr := parseHomebrewPrefix(prefixResult.Stdout)
 	if prefixParseErr != nil {
@@ -211,8 +212,9 @@ func (p HomebrewProvider) target(ctx context.Context, request Request, manager s
 	}
 	return target, nil
 }
-func (p HomebrewProvider) error(request Request, capability Capability, key string, cause error) error {
-	return &Error{Key: key, Args: []any{request.App.Name}, Provider: string(model.ProviderHomebrew), Capability: capability, Cause: cause}
+func (p HomebrewProvider) error(request Request, capability Capability, key string, cause error, details ...any) error {
+	args := append([]any{request.App.Name}, details...)
+	return &Error{Key: key, Args: args, Provider: string(model.ProviderHomebrew), Capability: capability, Cause: cause}
 }
 
 type brewInfo struct {

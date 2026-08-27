@@ -25,7 +25,7 @@ func (e fixtureDirEntry) Type() fs.FileMode {
 	}
 	return 0
 }
-func (e fixtureDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
+func (e fixtureDirEntry) Info() (fs.FileInfo, error) { return fixtureFileInfo{dir: e.dir}, nil }
 
 func fixtureEntries(values ...fixtureDirEntry) []fs.DirEntry {
 	entries := make([]fs.DirEntry, len(values))

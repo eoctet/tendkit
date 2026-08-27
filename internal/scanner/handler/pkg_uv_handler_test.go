@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,7 +47,10 @@ func TestUVHandlerGoldenMetadataAndFallback(t *testing.T) {
 	}}
 	h := newUV(r, uv)
 	h.stat = func(p string) (fs.FileInfo, error) {
-		if p == "/tools/tool-name/bin/python3" {
+		if p == "/tools" {
+			return fixtureFileInfo{dir: true}, nil
+		}
+		if p == "/tools/tool-name/bin/python3" || p == "/fixture/tool" {
 			return fixtureFileInfo{}, nil
 		}
 		return nil, ErrNotFound
@@ -68,6 +72,9 @@ func TestUVHandlerGoldenMetadataAndFallback(t *testing.T) {
 	}
 	if c.Application.Provider.Actions != nil {
 		t.Fatalf("UV scanner actions = %#v", c.Application.Provider.Actions)
+	}
+	if c.Evidence == nil || c.Evidence.Source != "uv" || !slices.Equal(c.Evidence.ExecutablePaths, []string{"/fixture/tool"}) {
+		t.Fatalf("evidence=%#v", c.Evidence)
 	}
 	for _, candidate := range result.Candidates {
 		assertActiveProvider(t, candidate.Application.Provider.Type)
@@ -107,5 +114,30 @@ func TestUVHandlerInventoryFailuresAndManager(t *testing.T) {
 	h.stat = func(string) (fs.FileInfo, error) { return fixtureFileInfo{dir: true}, nil }
 	if result := h.Scan(context.Background(), Request{Configured: []model.Application{{ID: "uv", InstallPath: "/uv"}}}); result.Complete || result.Err == nil {
 		t.Fatalf("missing=%#v", result)
+	}
+}
+
+func TestUVHandlerNonemptyInventoryRequiresAbsoluteToolDir(t *testing.T) {
+	r := uvRunner{run: func(_ context.Context, command string) (runtimeutil.Result, error) {
+		if strings.Contains(command, "show-paths") {
+			return runtimeutil.Result{Stdout: "tool v1.0.0\n  - tool (/tool)\n"}, nil
+		}
+		return runtimeutil.Result{}, errors.New("tool dir failed")
+	}}
+	h := newUV(r, "/uv")
+	result := h.Scan(context.Background(), Request{})
+	if result.Complete {
+		t.Fatalf("result=%#v", result)
+	}
+}
+
+func TestParseUVToolsRejectsDuplicateToolAndPathClaims(t *testing.T) {
+	for _, output := range []string{
+		"tool v1.0.0\n  - tool (/fixture/tool)\ntool v1.0.1\n  - tool (/fixture/other)\n",
+		"tool v1.0.0\n  - tool (/fixture/tool)\n  - tool (/fixture/tool)\n",
+	} {
+		if tools, ok := parseUVTools(output); ok || tools != nil {
+			t.Fatalf("duplicate uv claim accepted: tools=%#v ok=%v", tools, ok)
+		}
 	}
 }

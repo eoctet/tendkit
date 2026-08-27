@@ -280,6 +280,15 @@ func TestHomebrewRunnerFailureMatrixReturnsTypedErrors(t *testing.T) {
 					if failure.cause != nil && !errors.Is(err, failure.cause) {
 						t.Fatalf("error=%v does not wrap %v", err, failure.cause)
 					}
+					if failure.name == "nonzero" {
+						var typed *Error
+						if !errors.As(err, &typed) || len(typed.Args) < 2 || typed.Args[1] != 17 {
+							t.Fatalf("exit error=%#v", err)
+						}
+						if operation.name == "update" && failAt == 2 && !slices.Equal(typed.Args, []any{"Sample", 17, "failed"}) {
+							t.Fatalf("update exit args=%#v", typed.Args)
+						}
+					}
 					if len(runner.commands) != failAt+1 {
 						t.Fatalf("commands after failure=%q", runner.commands)
 					}
@@ -390,6 +399,9 @@ func TestHomebrewCaskOutdatedNonzeroWithoutTargetFails(t *testing.T) {
 	var typed *Error
 	if !errors.As(err, &typed) || typed.Key != "provider.homebrew_latest_exit" || typed.Provider != string(model.ProviderHomebrew) || typed.Capability != CapabilityLatest {
 		t.Fatalf("error=%#v", err)
+	}
+	if !slices.Equal(typed.Args, []any{"Sample", 1}) {
+		t.Fatalf("args=%#v", typed.Args)
 	}
 }
 

@@ -44,40 +44,47 @@ func (h *UVHandler) Scan(ctx context.Context, request Request) Result {
 	}
 
 	toolDirectory := ""
+	toolDirOK := false
 	if directory, err := h.runner.Run(ctx, runtimeutil.QuoteShell(uv)+" tool dir", nil); err == nil && directory.ExitCode == 0 {
 		toolDirectory = strings.TrimSpace(directory.Stdout)
+		if filepath.IsAbs(toolDirectory) {
+			if info, statErr := h.stat(toolDirectory); statErr == nil && info.IsDir() {
+				toolDirOK = true
+			}
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return Result{Complete: false, Err: err}
 	}
 
 	result := Result{Complete: runErr == nil && listing.ExitCode == 0}
-	lines := strings.Split(listing.Stdout, "\n")
-	matched := 0
-	for index, line := range lines {
+	tools, parseOK := parseUVTools(listing.Stdout)
+	if len(tools) > 0 && !toolDirOK {
+		result.Complete = false
+	}
+	matched := len(tools)
+	if !parseOK {
+		result.Complete = false
+	}
+	for _, tool := range tools {
 		if err := ctx.Err(); err != nil {
 			result.Complete = false
 			result.Err = err
 			return result
 		}
-		match := uvAppLine.FindStringSubmatch(strings.TrimSpace(line))
-		if len(match) == 0 {
-			continue
-		}
-		name, current := match[1], match[2]
-		matched++
+		name, current := tool.name, tool.version
 		reportPackageProgress(request, model.ScanStageApplication, name)
 		if err := ctx.Err(); err != nil {
 			result.Complete = false
 			result.Err = err
 			return result
 		}
-		installPath := uv
-		if index+1 < len(lines) {
-			if path := uvPathLine.FindStringSubmatch(lines[index+1]); len(path) > 1 {
-				installPath = path[1]
-			}
+		paths, valid := executableEvidencePaths(tool.paths, h.stat)
+		if !valid {
+			result.Complete = false
+			continue
 		}
+		installPath := paths[0]
 		metadata := h.metadata(ctx, toolDirectory, name, request)
 		if err := ctx.Err(); err != nil {
 			result.Complete = false
@@ -95,10 +102,12 @@ func (h *UVHandler) Scan(ctx context.Context, request Request) Result {
 			UpdateMode:  model.ModeAuto,
 			Provider:    model.ProviderConfig{Type: model.ProviderUV},
 			Package:     name,
-			Identity:    model.PackageIdentity("uv", name),
+			Identity:    model.PackageIdentity(string(h.Domain()), name),
 			ScanManaged: true,
 		}
-		result.Candidates = append(result.Candidates, packageCandidate(app, current, "uv:"+name))
+		candidate := packageCandidate(app, current, "uv:"+name)
+		candidate.Evidence = &InstallationEvidence{Source: string(h.Domain()), Package: name, ExecutablePaths: paths, InstallRoot: toolDirectory}
+		result.Candidates = append(result.Candidates, candidate)
 	}
 	if strings.TrimSpace(listing.Stdout) != "" && matched == 0 {
 		result.Complete = false
@@ -107,6 +116,46 @@ func (h *UVHandler) Scan(ctx context.Context, request Request) Result {
 		result.Err = &PackageInventoryIncompleteError{Ecosystem: "uv", Message: "incomplete or invalid uv tool inventory"}
 	}
 	return result
+}
+
+type uvTool struct {
+	name, version string
+	paths         []string
+}
+
+// parseUVTools accepts only complete records emitted by `uv tool list --show-paths`.
+func parseUVTools(output string) ([]uvTool, bool) {
+	if strings.TrimSpace(output) == "" {
+		return nil, true
+	}
+	var tools []uvTool
+	var current *uvTool
+	names := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimRight(output, "\n"), "\n") {
+		if match := uvAppLine.FindStringSubmatch(strings.TrimSpace(line)); len(match) > 0 {
+			if current != nil && len(current.paths) == 0 {
+				return nil, false
+			}
+			if names[match[1]] {
+				return nil, false
+			}
+			names[match[1]] = true
+			tools = append(tools, uvTool{name: match[1], version: match[2]})
+			current = &tools[len(tools)-1]
+			continue
+		}
+		if match := uvPathLine.FindStringSubmatch(line); len(match) > 1 && current != nil {
+			for _, value := range current.paths {
+				if value == strings.TrimSpace(match[1]) {
+					return nil, false
+				}
+			}
+			current.paths = append(current.paths, strings.TrimSpace(match[1]))
+			continue
+		}
+		return nil, false
+	}
+	return tools, current != nil && len(current.paths) > 0
 }
 
 func (h *UVHandler) manager(configured []model.Application) string {

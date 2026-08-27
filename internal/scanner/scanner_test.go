@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -724,6 +725,12 @@ esac
 
 func TestFullScanPrefersBuiltInCLIAndEnrichesFromNodePackage(t *testing.T) {
 	directory := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(directory, "@google", "gemini-cli"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "@google", "gemini-cli", "package.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	npm := `#!/bin/sh
 case "$*" in
   "--version") printf '10.0.0\n' ;;
@@ -941,7 +948,7 @@ func TestCompletePackageInventoryOmissionDirectlyVerifiesConfiguredApplication(t
 }
 
 func TestIncompletePackageScanPreservesManagedPackageState(t *testing.T) {
-	for _, ecosystem := range []string{packageEcosystemPython, packageEcosystemNode, packageEcosystemGo, packageEcosystemUV, packageEcosystemRuby} {
+	for _, ecosystem := range []string{string(handler.Python), string(handler.Node), string(handler.Go), string(handler.UV), string(handler.Ruby)} {
 		t.Run(ecosystem, func(t *testing.T) {
 			application := model.Application{ID: "managed", Type: model.ApplicationTypePackage, Identity: "package:" + ecosystem + ":sample", ScanManaged: true}
 			previous := model.ManagedStatus{UpdateStatus: model.StatusCurrent, CurrentVersion: "1.2.3"}
@@ -1019,11 +1026,11 @@ func TestPackageScannersReportMissingManagersAsIncomplete(t *testing.T) {
 		settings  model.PackageScanSettings
 		ecosystem string
 	}{
-		{"python", model.PackageScanSettings{Python: enabled, Node: disabled, Go: disabled, UV: disabled, Ruby: disabled}, packageEcosystemPython},
-		{"node", model.PackageScanSettings{Python: disabled, Node: enabled, Go: disabled, UV: disabled, Ruby: disabled}, packageEcosystemNode},
-		{"go", model.PackageScanSettings{Python: disabled, Node: disabled, Go: enabled, UV: disabled, Ruby: disabled}, packageEcosystemGo},
-		{"uv", model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: enabled, Ruby: disabled}, packageEcosystemUV},
-		{"ruby", model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: disabled, Ruby: enabled}, packageEcosystemRuby},
+		{"python", model.PackageScanSettings{Python: enabled, Node: disabled, Go: disabled, UV: disabled, Ruby: disabled}, string(handler.Python)},
+		{"node", model.PackageScanSettings{Python: disabled, Node: enabled, Go: disabled, UV: disabled, Ruby: disabled}, string(handler.Node)},
+		{"go", model.PackageScanSettings{Python: disabled, Node: disabled, Go: enabled, UV: disabled, Ruby: disabled}, string(handler.Go)},
+		{"uv", model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: enabled, Ruby: disabled}, string(handler.UV)},
+		{"ruby", model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: disabled, Ruby: enabled}, string(handler.Ruby)},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -1059,11 +1066,11 @@ func TestPackageScannersRejectFailedOrInvalidInventories(t *testing.T) {
 		settings  model.PackageScanSettings
 		ecosystem string
 	}{
-		{"python invalid JSON", map[string]string{"python3": "printf 'not-json\\n'; exit 0"}, model.PackageScanSettings{Python: enabled, Node: disabled, Go: disabled, UV: disabled, Ruby: disabled}, packageEcosystemPython},
-		{"node partial nonzero", map[string]string{"npm": "printf '{\"dependencies\":{}}\\n'; exit 1"}, model.PackageScanSettings{Python: disabled, Node: enabled, Go: disabled, UV: disabled, Ruby: disabled}, packageEcosystemNode},
-		{"go nonzero", map[string]string{"go": "exit 1"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: enabled, UV: disabled, Ruby: disabled}, packageEcosystemGo},
-		{"uv invalid output", map[string]string{"uv": "printf 'unexpected output\\n'; exit 0"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: enabled, Ruby: disabled}, packageEcosystemUV},
-		{"ruby invalid JSON", map[string]string{"ruby": "printf 'not-json\\n'; exit 0", "gem": "exit 0"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: disabled, Ruby: enabled}, packageEcosystemRuby},
+		{"python invalid JSON", map[string]string{"python3": "printf 'not-json\\n'; exit 0"}, model.PackageScanSettings{Python: enabled, Node: disabled, Go: disabled, UV: disabled, Ruby: disabled}, string(handler.Python)},
+		{"node partial nonzero", map[string]string{"npm": "printf '{\"dependencies\":{}}\\n'; exit 1"}, model.PackageScanSettings{Python: disabled, Node: enabled, Go: disabled, UV: disabled, Ruby: disabled}, string(handler.Node)},
+		{"go nonzero", map[string]string{"go": "exit 1"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: enabled, UV: disabled, Ruby: disabled}, string(handler.Go)},
+		{"uv invalid output", map[string]string{"uv": "printf 'unexpected output\\n'; exit 0"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: enabled, Ruby: disabled}, string(handler.UV)},
+		{"ruby invalid JSON", map[string]string{"ruby": "printf 'not-json\\n'; exit 0", "gem": "exit 0"}, model.PackageScanSettings{Python: disabled, Node: disabled, Go: disabled, UV: disabled, Ruby: enabled}, string(handler.Ruby)},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -1083,6 +1090,34 @@ func TestPackageScannersRejectFailedOrInvalidInventories(t *testing.T) {
 	}
 }
 
+func TestPythonInstallInfoProtocolViolationsMarkEcosystemIncomplete(t *testing.T) {
+	disabled, enabled := false, true
+	for _, installInfo := range []string{
+		`{"one":{"path":"/fixture/one","scope":"system","complete":true,"unknown":true}}`,
+		`{"one":{"path":"/fixture/one","scope":"system","complete":true}} {}`,
+	} {
+		t.Run(installInfo, func(t *testing.T) {
+			directory := t.TempDir()
+			python := `#!/bin/sh
+case "$*" in
+  "-m pip list --not-required --format=json") printf '%s\n' '[{"name":"one","version":"1"}]' ;;
+  "-m pip show one") exit 0 ;;
+  "-c "*) printf '%s\n' '` + installInfo + `' ;;
+  *) exit 1 ;;
+esac
+`
+			if err := os.WriteFile(filepath.Join(directory, "python3"), []byte(python), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", directory)
+			result := scanPackages(context.Background(), model.PackageScanSettings{Python: enabled, Node: disabled, Go: disabled, UV: disabled, Ruby: disabled}, runtimeutil.Runner{IdleTimeout: time.Second}, exclusionMatcher{}, nil, nil)
+			if result.Complete[string(handler.Python)] || result.Errors[string(handler.Python)] == nil || len(result.Discoveries) != 0 {
+				t.Fatalf("non-strict Python install-info was accepted: %#v", result)
+			}
+		})
+	}
+}
+
 func TestCargoUnsafeBinaryInventoryProducesNoDiscovery(t *testing.T) {
 	directory := t.TempDir()
 	root := filepath.Join(directory, "cargo-root")
@@ -1093,7 +1128,7 @@ func TestCargoUnsafeBinaryInventoryProducesNoDiscovery(t *testing.T) {
 	t.Setenv("PATH", directory)
 	t.Setenv("CARGO_INSTALL_ROOT", root)
 	result := scanPackages(context.Background(), model.PackageScanSettings{Cargo: true}, runtimeutil.Runner{IdleTimeout: time.Second}, exclusionMatcher{}, nil, nil)
-	if result.Complete[packageEcosystemCargo] || result.Errors[packageEcosystemCargo] == nil || len(result.Discoveries) != 0 {
+	if result.Complete[string(handler.Cargo)] || result.Errors[string(handler.Cargo)] == nil || len(result.Discoveries) != 0 {
 		t.Fatalf("unsafe Cargo inventory result=%#v", result)
 	}
 }
@@ -1139,6 +1174,131 @@ func TestGenerateIdentityUsesUVScannerEcosystem(t *testing.T) {
 	})
 	if err != nil || identity != "package:uv:ruff" {
 		t.Fatalf("GenerateIdentity() = %q, %v", identity, err)
+	}
+}
+
+func TestCanonicalOwnedProposalPreservesOwnerActionsWithoutBaseline(t *testing.T) {
+	canonical := model.Application{Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease, Actions: &model.ProviderActions{Version: "path --version"}}}
+	owner := model.Application{Provider: model.ProviderConfig{Type: model.ProviderDefault, Actions: &model.ProviderActions{Version: "owner --version", Check: "owner check", Update: "owner update"}}}
+	got := canonicalOwnedProposal(canonical, owner, model.Application{}, false)
+	if got.Provider.CheckAction() != "owner check" || got.Provider.UpdateAction() != "owner update" || got.Provider.VersionAction() != "path --version" {
+		t.Fatalf("actions = %#v", got.Provider.Actions)
+	}
+}
+
+func TestCanonicalOwnedProposalMergesBaselineActionsPerCapability(t *testing.T) {
+	canonical := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Version: "path version"}}}
+	owner := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Check: "owner check", Update: "owner update"}}}
+	baseline := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Version: "baseline version", Check: "baseline check"}}}
+	got := canonicalOwnedProposal(canonical, owner, baseline, true)
+	if got.Provider.VersionAction() != "baseline version" || got.Provider.CheckAction() != "baseline check" || got.Provider.UpdateAction() != "owner update" {
+		t.Fatalf("actions=%#v", got.Provider.Actions)
+	}
+}
+
+func TestCanonicalOwnedProposalClonesBaselineDownload(t *testing.T) {
+	canonical := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Version: "path version"}}}
+	owner := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Update: "owner update"}}}
+	baseline := model.Application{Provider: model.ProviderConfig{Actions: &model.ProviderActions{Download: &model.Download{URL: "https://example.invalid/tool", ExtraArgs: []string{"--retry", "2"}}}}}
+	got := canonicalOwnedProposal(canonical, owner, baseline, true)
+	if got.Provider.Actions.Download == baseline.Provider.Actions.Download || !reflect.DeepEqual(got.Provider.Actions.Download, baseline.Provider.Actions.Download) {
+		t.Fatalf("download was not value-cloned: got=%#v baseline=%#v", got.Provider.Actions.Download, baseline.Provider.Actions.Download)
+	}
+}
+
+func TestReconcileManagedInstallationsEvidenceSources(t *testing.T) {
+	for _, source := range []string{"go", "uv", "node", "python", "ruby"} {
+		t.Run(source, func(t *testing.T) {
+			path := writeScannerFixture(t, filepath.Join(t.TempDir(), source))
+			canonical := model.Application{ID: "cli-" + source, Name: source, Type: model.ApplicationTypeCLI, InstallPath: path, ScanManaged: true, Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease, Actions: &model.ProviderActions{Version: "v"}}}
+			owner := managedOwner("pkg-"+source, source, model.ProviderDefault, source, "package:"+source+":"+source, source, path, model.ModeAuto, "1")
+			session := scanSession{discovered: []model.Application{canonical}, observed: map[string]model.ManagedStatus{}, packages: packageScanResult{Complete: map[string]bool{source: true}}, installationDiscoveries: []discovery{owner}}
+			session.reconcileManagedInstallations()
+			if len(session.discovered) != 1 || session.discovered[0].ID != canonical.ID || session.discovered[0].Package != source {
+				t.Fatalf("result=%#v", session.discovered)
+			}
+		})
+	}
+}
+
+func TestReconcileManagedInstallationsIncompleteEvidenceSourcesHoldBaseline(t *testing.T) {
+	for _, source := range []string{"go", "uv", "node", "python", "ruby"} {
+		t.Run(source, func(t *testing.T) {
+			path := writeScannerFixture(t, filepath.Join(t.TempDir(), source))
+			previous := model.ManagedStatus{CurrentVersion: "1.2.3", UpdateStatus: model.StatusCurrent}
+			baseline := model.Application{ID: "cli-" + source, Name: source, Type: model.ApplicationTypeCLI, InstallPath: path, ScanManaged: true, Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}, Identity: "cli:" + source, StatusManaged: previous}
+			owner := managedOwner("pkg-"+source, source, model.ProviderDefault, source, "package:"+source+":"+source, source, path, model.ModeAuto, "1")
+			session := scanSession{catalog: model.Config{Apps: []model.Application{baseline}}, discovered: []model.Application{baseline}, observed: map[string]model.ManagedStatus{baseline.ID: previous}, packages: packageScanResult{Complete: map[string]bool{source: false}}, installationDiscoveries: []discovery{owner}}
+			session.reconcileManagedInstallations()
+			got := applicationByID(t, session.catalog.Apps, baseline.ID)
+			if got.Provider.Type != model.ProviderGitHubRelease || got.Identity != baseline.Identity {
+				t.Fatalf("baseline migrated: %#v", got)
+			}
+			if got.StatusManaged != previous || applicationByID(t, session.discovered, baseline.ID).StatusManaged != previous || session.observed[baseline.ID] != previous || session.observed[baseline.ID].UpdateStatus == model.StatusMissing {
+				t.Fatalf("incomplete inventory changed baseline state: catalog=%#v discovered=%#v observed=%#v", got.StatusManaged, applicationByID(t, session.discovered, baseline.ID).StatusManaged, session.observed[baseline.ID])
+			}
+		})
+	}
+}
+
+func TestReconcileManagedInstallationsIncompleteEvidenceSourcesKeepNewCanonical(t *testing.T) {
+	for _, source := range []string{"go", "uv", "node", "python", "ruby"} {
+		t.Run(source, func(t *testing.T) {
+			path := writeScannerFixture(t, filepath.Join(t.TempDir(), source))
+			status := model.ManagedStatus{CurrentVersion: "1.2.3", UpdateStatus: model.StatusCurrent}
+			canonical := model.Application{ID: "cli-" + source, Name: source, Type: model.ApplicationTypeCLI, InstallPath: path, ScanManaged: true, Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}, Identity: "cli:" + source, StatusManaged: status}
+			owner := managedOwner("pkg-"+source, source, model.ProviderDefault, source, "package:"+source+":"+source, source, path, model.ModeAuto, "1")
+			session := scanSession{discovered: []model.Application{canonical}, observed: map[string]model.ManagedStatus{canonical.ID: status}, packages: packageScanResult{Complete: map[string]bool{source: false}}, installationDiscoveries: []discovery{owner}}
+
+			session.reconcileManagedInstallations()
+
+			if len(session.discovered) != 1 || session.discovered[0].ID != canonical.ID {
+				t.Fatalf("incomplete inventory replaced the canonical discovery: %#v", session.discovered)
+			}
+			if got := session.discovered[0]; got.Provider.Type != canonical.Provider.Type || got.Identity != canonical.Identity || got.StatusManaged != status {
+				t.Fatalf("incomplete inventory migrated the canonical discovery: %#v", got)
+			}
+			if session.observed[canonical.ID] != status {
+				t.Fatalf("incomplete inventory changed the canonical observation: %#v", session.observed)
+			}
+		})
+	}
+}
+
+func TestReconcileManagedInstallationsIncompleteEvidenceSourceKeepsIndependentOwnerHealthy(t *testing.T) {
+	path := writeScannerFixture(t, filepath.Join(t.TempDir(), "node"))
+	status := model.ManagedStatus{CurrentVersion: "1.2.3", UpdateStatus: model.StatusCurrent}
+	owner := managedOwner("pkg-node-tool", "tool", model.ProviderNPM, "tool", "package:node:tool", "node", path, model.ModeAuto, status.CurrentVersion)
+	owner.State = status
+	session := scanSession{observed: map[string]model.ManagedStatus{}, packages: packageScanResult{Complete: map[string]bool{"node": false}}, installationDiscoveries: []discovery{owner}}
+
+	session.reconcileManagedInstallations()
+
+	if len(session.discovered) != 1 || session.discovered[0].ID != owner.App.ID {
+		t.Fatalf("independent owner disappeared from incomplete inventory: %#v", session.discovered)
+	}
+	if got := session.observed[owner.App.ID]; got != status {
+		t.Fatalf("independent owner was turned into an installation reconciliation conflict: %#v", got)
+	}
+}
+
+func TestReconcileManagedInstallationsCompleteConflictKeepsFailedOwnersVisible(t *testing.T) {
+	path := writeScannerFixture(t, filepath.Join(t.TempDir(), "node"))
+	canonical := model.Application{ID: "cli-node", Name: "node", Type: model.ApplicationTypeCLI, InstallPath: path, ScanManaged: true, Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}, Identity: "cli:node"}
+	first := managedOwner("pkg-node-first", "first", model.ProviderNPM, "first", "package:node:first", "node", path, model.ModeAuto, "1")
+	second := managedOwner("pkg-node-second", "second", model.ProviderNPM, "second", "package:node:second", "node", path, model.ModeAuto, "1")
+	session := scanSession{discovered: []model.Application{canonical}, observed: map[string]model.ManagedStatus{}, packages: packageScanResult{Complete: map[string]bool{"node": true}}, installationDiscoveries: []discovery{first, second}}
+
+	session.reconcileManagedInstallations()
+
+	if len(session.discovered) != 2 {
+		t.Fatalf("complete installation reconciliation conflict disappeared: %#v", session.discovered)
+	}
+	for _, id := range []string{first.App.ID, second.App.ID} {
+		applicationByID(t, session.discovered, id)
+		if got := session.observed[id]; got.UpdateStatus != model.StatusFailed || got.Error == "" {
+			t.Fatalf("conflicting owner %s is not visible as failed: %#v", id, got)
+		}
 	}
 }
 
@@ -1225,6 +1385,44 @@ func TestReconcileManagedInstallationsKeepsExistingStandaloneCLISeparateFromHome
 	}
 }
 
+func TestReconcileManagedInstallationsUsesStableIdentityAcrossMultipleGroups(t *testing.T) {
+	dir := t.TempDir()
+	standalonePath := writeScannerFixture(t, filepath.Join(dir, "standalone", "rg"))
+	homebrewPath := writeScannerFixture(t, filepath.Join(dir, "homebrew", "Cellar", "ripgrep", "15.2.0", "bin", "rg"))
+	homebrewLink := filepath.Join(dir, "homebrew", "bin", "rg")
+	if err := os.MkdirAll(filepath.Dir(homebrewLink), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(homebrewPath, homebrewLink); err != nil {
+		t.Fatal(err)
+	}
+	cargoPath := writeScannerFixture(t, filepath.Join(dir, "cargo", "bin", "tool"))
+	standalone := model.Application{ID: "cli-ripgrep", Name: "ripgrep", Type: model.ApplicationTypeCLI, InstallPath: standalonePath, ScanManaged: true, Identity: "cli:ripgrep", Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}}
+	displaced := cloneApplication(standalone)
+	displaced.InstallPath = homebrewLink
+	canonical := model.Application{ID: "cli-tool", Name: "tool", Type: model.ApplicationTypeCLI, InstallPath: cargoPath, ScanManaged: true, Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}}
+	homebrew := managedOwner("pkg-homebrew-formula-ripgrep", "ripgrep", model.ProviderHomebrew, "formula/ripgrep", "package:homebrew-formula:ripgrep", "homebrew-formula", homebrewPath, model.ModeAuto, "15.2.0")
+	cargo := managedOwner("pkg-cargo-tool", "tool", model.ProviderCargo, "tool", "package:cargo:tool", "cargo", cargoPath, model.ModeCheck, "1.0.0")
+	session := scanSession{
+		catalog:                 model.Config{Apps: []model.Application{standalone}},
+		discovered:              []model.Application{displaced, canonical},
+		observed:                map[string]model.ManagedStatus{standalone.ID: {CurrentVersion: "15.2.0"}, canonical.ID: {CurrentVersion: "1.0.0"}},
+		packages:                packageScanResult{Complete: map[string]bool{"homebrew-formula": true, "cargo": true}},
+		installationDiscoveries: []discovery{homebrew, cargo},
+	}
+
+	session.reconcileManagedInstallations()
+
+	independent := applicationByID(t, session.discovered, homebrew.App.ID)
+	if independent.Provider.Type != model.ProviderHomebrew || independent.InstallPath != homebrewPath {
+		t.Fatalf("displaced owner was overwritten: %#v", independent)
+	}
+	merged := applicationByID(t, session.discovered, canonical.ID)
+	if merged.Provider.Type != model.ProviderCargo || merged.Package != cargo.App.Package || merged.Identity != cargo.App.Identity {
+		t.Fatalf("later reconciliation group was not merged by stable identity: %#v", merged)
+	}
+}
+
 func TestReconcileManagedInstallationsSwitchesCanonicalOwnerAtomicallyInBothDirections(t *testing.T) {
 	dir := t.TempDir()
 	brewPath := writeScannerFixture(t, filepath.Join(dir, "brew", "bin", "rg"))
@@ -1280,10 +1478,11 @@ func TestReconcileManagedInstallationsHoldsWholeGroupOnIncompleteAmbiguousOrBrok
 		name     string
 		complete map[string]bool
 		owners   []discovery
+		visible  bool
 	}{
-		{"incomplete-baseline-owner", map[string]bool{"homebrew-formula": false, "cargo": true}, []discovery{managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", cargoPath, model.ModeCheck, "new")}},
-		{"two-owners-one-path", map[string]bool{"homebrew-formula": true, "cargo": true}, []discovery{managedOwner("pkg-homebrew-formula-ripgrep", "ripgrep", model.ProviderHomebrew, "formula/ripgrep", "package:homebrew-formula:ripgrep", "homebrew-formula", cargoPath, model.ModeAuto, "new"), managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", cargoPath, model.ModeCheck, "new")}},
-		{"broken-symlink", map[string]bool{"homebrew-formula": true, "cargo": true}, []discovery{managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", filepath.Join(dir, "missing", "rg"), model.ModeCheck, "new")}},
+		{"incomplete-baseline-owner", map[string]bool{"homebrew-formula": false, "cargo": true}, []discovery{managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", cargoPath, model.ModeCheck, "new")}, false},
+		{"two-owners-one-path", map[string]bool{"homebrew-formula": true, "cargo": true}, []discovery{managedOwner("pkg-homebrew-formula-ripgrep", "ripgrep", model.ProviderHomebrew, "formula/ripgrep", "package:homebrew-formula:ripgrep", "homebrew-formula", cargoPath, model.ModeAuto, "new"), managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", cargoPath, model.ModeCheck, "new")}, true},
+		{"broken-symlink", map[string]bool{"homebrew-formula": true, "cargo": true}, []discovery{managedOwner("pkg-cargo-ripgrep", "ripgrep", model.ProviderCargo, "ripgrep", "package:cargo:ripgrep", "cargo", filepath.Join(dir, "missing", "rg"), model.ModeCheck, "new")}, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			session := scanSession{catalog: model.Config{Apps: []model.Application{baseline}, ScanVersionControl: map[string]map[string]model.ScanKeepResolution{baseline.ID: {"provider": {}}}}, state: model.RuntimeState{Observations: map[string]model.ScanObservation{baseline.ID: {Found: true, Path: brewPath}}}, discovered: []model.Application{{ID: baseline.ID, Name: baseline.Name, Type: baseline.Type, InstallPath: cargoPath, ScanManaged: true}}, observed: map[string]model.ManagedStatus{baseline.ID: {CurrentVersion: "candidate", UpdateStatus: model.StatusUnchecked}}, packages: packageScanResult{Complete: test.complete}, installationDiscoveries: test.owners}
@@ -1293,10 +1492,18 @@ func TestReconcileManagedInstallationsHoldsWholeGroupOnIncompleteAmbiguousOrBrok
 			}
 			if got := session.observed[baseline.ID]; got.CurrentVersion != "baseline" || got.UpdateStatus != model.StatusCurrent {
 				t.Fatalf("baseline status not restored: %#v", got)
-			} else if !strings.Contains(got.Error, i18n.T("scanner.ownership_conflict_label")) || !strings.Contains(got.Error, "ripgrep") {
-				t.Fatalf("ownership conflict was not user-visible: %#v", got)
+			} else if test.visible && (!strings.Contains(got.Error, i18n.T("scanner.install_recon_conflict_label")) || !strings.Contains(got.Error, "ripgrep")) {
+				t.Fatalf("installation reconciliation conflict was not user-visible: %#v", got)
+			} else if !test.visible && got.Error != "" {
+				t.Fatalf("incomplete inventory changed observed error: %#v", got)
 			}
 			for _, found := range session.discovered {
+				if !test.visible && found.ID == baseline.ID {
+					if found.StatusManaged != baseline.StatusManaged {
+						t.Fatalf("incomplete inventory changed discovered baseline: %#v", found)
+					}
+					continue
+				}
 				if found.ID == baseline.ID || found.Name == "ripgrep" {
 					t.Fatalf("failed group leaked a candidate: %#v", session.discovered)
 				}
@@ -1311,7 +1518,7 @@ func TestReconcileManagedInstallationsReportsBrokenEvidenceWithoutBaseline(t *te
 	session.reconcileManagedInstallations()
 	got := applicationByID(t, session.discovered, broken.App.ID)
 	status := session.observed[got.ID]
-	if status.UpdateStatus != model.StatusFailed || !strings.Contains(status.Error, i18n.T("scanner.ownership_conflict_label")) || !strings.Contains(status.Error, i18n.T("scanner.ownership_conflict_claim_path")) {
+	if status.UpdateStatus != model.StatusFailed || !strings.Contains(status.Error, i18n.T("scanner.install_recon_conflict_label")) || !strings.Contains(status.Error, i18n.T("scanner.install_recon_conflict_claim_path")) {
 		t.Fatalf("broken first-scan evidence was silent: app=%#v status=%#v", got, status)
 	}
 }
@@ -1386,14 +1593,14 @@ func TestReconcileManagedInstallationsReportsAmbiguousMultiApplicationCaskPerGro
 		t.Fatalf("ambiguous cask folded into application: %#v", got)
 	}
 	status := session.observed[baseline.ID]
-	if status.UpdateStatus == model.StatusMissing || !strings.Contains(status.Error, i18n.T("scanner.ownership_conflict_multiple_products")) || len(session.discovered) != 0 {
+	if status.UpdateStatus == model.StatusMissing || !strings.Contains(status.Error, i18n.T("scanner.install_recon_conflict_multiple_products")) || len(session.discovered) != 0 {
 		t.Fatalf("ambiguous cask conflict was not isolated: status=%#v discovered=%#v", status, session.discovered)
 	}
 
 	firstScan := scanSession{observed: map[string]model.ManagedStatus{}, packages: packageScanResult{Complete: map[string]bool{"homebrew-cask": true}}, installationDiscoveries: []discovery{owner}}
 	firstScan.reconcileManagedInstallations()
 	reported := applicationByID(t, firstScan.discovered, owner.App.ID)
-	if reported.Provider.Type != model.ProviderHomebrew || firstScan.observed[reported.ID].UpdateStatus != model.StatusFailed || !strings.Contains(firstScan.observed[reported.ID].Error, i18n.T("scanner.ownership_conflict_multiple_products")) {
+	if reported.Provider.Type != model.ProviderHomebrew || firstScan.observed[reported.ID].UpdateStatus != model.StatusFailed || !strings.Contains(firstScan.observed[reported.ID].Error, i18n.T("scanner.install_recon_conflict_multiple_products")) {
 		t.Fatalf("first-scan ambiguity was silent: app=%#v status=%#v", reported, firstScan.observed[reported.ID])
 	}
 }

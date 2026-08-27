@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/eoctet/tendkit/internal/model"
@@ -103,4 +104,32 @@ func inventoryError(ecosystem string, err error, exit int) error {
 		return err
 	}
 	return &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "package inventory command failed"}
+}
+
+func validEvidenceFile(info os.FileInfo) bool {
+	if info == nil || info.IsDir() || !info.Mode().IsRegular() {
+		return false
+	}
+	return info.Mode()&0o111 != 0
+}
+
+func executableEvidencePaths(values []string, stat func(string) (os.FileInfo, error)) ([]string, bool) {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !filepath.IsAbs(value) {
+			return nil, false
+		}
+		info, err := stat(value)
+		if err != nil || !validEvidenceFile(info) {
+			return nil, false
+		}
+		seen[value] = struct{}{}
+	}
+	paths := make([]string, 0, len(seen))
+	for value := range seen {
+		paths = append(paths, value)
+	}
+	sort.Strings(paths)
+	return paths, len(paths) > 0
 }
