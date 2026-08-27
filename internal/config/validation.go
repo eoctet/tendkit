@@ -271,12 +271,16 @@ func hasBuiltinUpdate(app model.Application) bool {
 	if app.Provider.Type == model.ProviderSparkle {
 		return app.Type == model.ApplicationTypeBundle
 	}
+	switch app.Provider.Type {
+	case model.ProviderNPM, model.ProviderPyPI, model.ProviderUV:
+		return app.Type == model.ApplicationTypePackage
+	case model.ProviderHomebrew:
+		return strings.TrimSpace(app.Package) != "" && (app.Type == model.ApplicationTypePackage || app.Type == model.ApplicationTypeCLI || app.Type == model.ApplicationTypeBundle)
+	}
 	if app.Type != model.ApplicationTypePackage {
 		return false
 	}
 	switch app.Provider.Type {
-	case model.ProviderNPM, model.ProviderPyPI, model.ProviderUV:
-		return true
 	case model.ProviderGo:
 		return validGoComponent(app)
 	default:
@@ -285,7 +289,7 @@ func hasBuiltinUpdate(app model.Application) bool {
 }
 
 func hasLatestCapability(provider model.ProviderConfig) bool {
-	return strings.TrimSpace(provider.CheckAction()) != "" || provider.Type != model.ProviderDefault
+	return strings.TrimSpace(provider.CheckAction()) != "" || provider.Type != model.ProviderDefault && provider.Type != model.ProviderCargo
 }
 
 func hasBuiltinDownload(app model.Application) bool {

@@ -20,7 +20,7 @@ TendKit runs locally on macOS and Linux. Its purpose is not to replace your exis
 
 ## ✨ Why TendKit?
 
-|     | What you get |
+| | What you get |
 | --- | --- |
 | 🧰 | **One clear inventory** — View CLIs, global packages, and macOS developer apps in one place. |
 | 🔎 | **Less repetitive checking** — No need to remember every tool's command; TendKit discovers and manages them for you. |
@@ -38,7 +38,7 @@ TendKit continues to use your existing package managers and update methods. It g
 | **Setting up or auditing a workstation** | Scan once to build a reviewable inventory instead of checking each development environment by hand. |
 | **Routine maintenance** | Check all managed tools at once and focus only on items that actually have a new version. |
 | **Protecting a stable environment** | Review results one by one and update only selected tools instead of running a blind batch upgrade. |
-| **Mixed installation sources** | View PATH tools, global npm/Python/Go/uv/Ruby packages, and macOS apps in one place. |
+| **Mixed installation sources** | View PATH tools, Homebrew, global npm/Python/Go/uv/Ruby/Cargo packages, and macOS apps in one place. |
 
 ## 🧭 How it works
 
@@ -90,10 +90,10 @@ The TUI creates `~/.config/tendkit/config.json` and its parent directory when it
 TendKit can scan and identify:
 
 - supported developer CLIs available on `PATH`;
-- global packages managed by npm, Python, Go, uv, and Ruby;
+- Homebrew formulae and casks, global packages managed by npm, Python, Go, uv, Ruby and Cargo;
 - developer applications in `/Applications` and `~/Applications` on macOS.
 
-It can check versions through GitHub Releases and tags, npm, PyPI, uv, JetBrains, Go, Node.js, Sparkle feeds, and custom commands. Available capabilities depend on the information exposed by each tool or package manager. Project-local dependencies and virtual environments are not currently scanned.
+It can check versions through GitHub Releases and tags, Homebrew, npm, PyPI, uv, JetBrains, Go, Node.js, Sparkle feeds, Cargo, and custom commands. Available capabilities depend on the information exposed by each tool or package manager. Project-local dependencies and virtual environments are not currently scanned.
 
 ## 🛡️ Safety and control
 

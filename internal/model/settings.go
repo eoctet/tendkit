@@ -62,9 +62,12 @@ type ScanSettings struct {
 
 // PackageScanSettings enables individual package ecosystems.
 type PackageScanSettings struct {
-	Python bool `json:"python"`
-	Node   bool `json:"node"`
-	Go     bool `json:"go"`
-	UV     bool `json:"uv"`
-	Ruby   bool `json:"ruby"`
+	Python          bool `json:"python"`
+	Node            bool `json:"node"`
+	Go              bool `json:"go"`
+	UV              bool `json:"uv"`
+	Ruby            bool `json:"ruby"`
+	HomebrewFormula bool `json:"homebrew-formula"`
+	HomebrewCask    bool `json:"homebrew-cask"`
+	Cargo           bool `json:"cargo"`
 }

@@ -81,3 +81,26 @@ func expandConfiguredPath(value string, homeDir func() (string, error)) string {
 	}
 	return value
 }
+
+func managerPath(binary string, configured []model.Application, lookPath func(string) (string, error), stat func(string) (os.FileInfo, error), homeDir func() (string, error)) string {
+	if path, err := lookPath(binary); err == nil {
+		return path
+	}
+	for _, app := range configured {
+		if !strings.EqualFold(app.ID, binary) && !strings.EqualFold(app.Name, binary) {
+			continue
+		}
+		path := expandConfiguredPath(app.InstallPath, homeDir)
+		if info, err := stat(path); err == nil && !info.IsDir() {
+			return path
+		}
+	}
+	return ""
+}
+
+func inventoryError(ecosystem string, err error, exit int) error {
+	if err != nil {
+		return err
+	}
+	return &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "package inventory command failed"}
+}

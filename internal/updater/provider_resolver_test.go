@@ -63,9 +63,36 @@ func TestCheckerCheckActionOverridesBuiltInProvider(t *testing.T) {
 	}
 }
 
+func TestCheckerCargoCheckActionProvidesLatest(t *testing.T) {
+	checker := testChecker(t, runtimeutil.Runner{})
+	app := model.Application{
+		Name:        "Sample",
+		Package:     "sample",
+		ScanManaged: true,
+		Provider: model.ProviderConfig{
+			Type:    model.ProviderCargo,
+			Actions: &model.ProviderActions{Check: "printf '2.4.1\\n'"},
+		},
+	}
+	latest, err := checker.latest(context.Background(), app, "1.0.0")
+	if err != nil || latest != "2.4.1" {
+		t.Fatalf("Cargo check action latest=%q error=%v", latest, err)
+	}
+}
+
+func TestCheckerCargoLatestRequiresExplicitCheckAction(t *testing.T) {
+	checker := testChecker(t, runtimeutil.Runner{})
+	app := model.Application{Name: "Sample", Package: "sample", Provider: model.ProviderConfig{Type: model.ProviderCargo}}
+	_, err := checker.latest(context.Background(), app, "1.0.0")
+	var typed *providerpkg.Error
+	if !errors.As(err, &typed) || typed.Provider != string(model.ProviderCargo) || typed.Capability != providerpkg.CapabilityLatest || !errors.Is(err, providerpkg.ErrUnavailable) {
+		t.Fatalf("Cargo builtin Latest error=%#v", err)
+	}
+}
+
 func TestCheckerRegistersBuiltins(t *testing.T) {
 	got := testChecker(t, runtimeutil.Runner{}).providerNames()
-	want := []string{"github_release", "github_tag", "go", "jetbrains", "node_lts", "npm", "pypi", "sparkle", "uv"}
+	want := []string{"cargo", "github_release", "github_tag", "go", "homebrew", "jetbrains", "node_lts", "npm", "pypi", "sparkle", "uv"}
 	if len(got) != len(want) {
 		t.Fatalf("providers=%v", got)
 	}
@@ -393,6 +420,24 @@ func TestCheckerActionOverlaysExecuteConfiguredCapabilities(t *testing.T) {
 	resolved, err := checker.resolveDownload(context.Background(), app, state)
 	if err != nil || resolved.Spec.URL != "https://example.invalid/sample.zip" || resolved.Spec.Filename != "sample.zip" {
 		t.Fatalf("ResolveDownload() = %#v, %v", resolved, err)
+	}
+}
+
+func TestCheckerCargoUpdateRequiresAndExecutesExplicitAction(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "cargo-updated")
+	checker := testChecker(t, runtimeutil.Runner{IdleTimeout: time.Second})
+	app := model.Application{Name: "Sample", Package: "sample", Provider: model.ProviderConfig{Type: model.ProviderCargo}}
+	_, err := checker.executeUpdate(context.Background(), app, model.ManagedStatus{})
+	var typed *providerpkg.Error
+	if !errors.As(err, &typed) || typed.Provider != string(model.ProviderCargo) || typed.Capability != providerpkg.CapabilityUpdate || !errors.Is(err, providerpkg.ErrUnavailable) {
+		t.Fatalf("Cargo builtin Update error=%#v", err)
+	}
+	app.Provider.Actions = &model.ProviderActions{Update: "touch " + runtimeutil.QuoteShell(marker)}
+	if _, err := checker.executeUpdate(context.Background(), app, model.ManagedStatus{}); err != nil {
+		t.Fatalf("Cargo action Update error=%v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("Cargo action Update was not executed: %v", err)
 	}
 }
 

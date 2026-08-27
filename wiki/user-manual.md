@@ -143,6 +143,9 @@ If another program changes the configuration file, TendKit refuses to overwrite 
 | Go | Installed tools in `GOBIN` / `GOPATH/bin` |
 | uv | Tools managed by uv |
 | Ruby | Installed gems |
+| Homebrew formula | Packages installed as Homebrew formulae |
+| Homebrew cask | macOS applications installed as Homebrew casks |
+| Cargo | Packages managed by the Cargo CLI |
 
 Package scans do not cover project dependencies, virtual environments, or isolated project environments. If a package manager is missing or returns an incomplete inventory, other scan domains continue and existing managed items are not deleted for that reason alone.
 
@@ -170,6 +173,8 @@ TendKit reads the installed version, asks a Provider for the latest version, and
 | `go` | Go runtime or Go tools |
 | `node_lts` | Latest Node.js LTS |
 | `sparkle` | macOS Sparkle appcasts |
+| `homebrew` | Homebrew formulae and casks |
+| `cargo` | Cargo binary crates |
 
 A Provider that can check the latest version may not support automatic updates. `provider.actions` can override individual built-in capabilities.
 

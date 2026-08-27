@@ -6,7 +6,12 @@ import (
 	"strings"
 
 	"github.com/eoctet/tendkit/internal/model"
+	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 )
+
+type commandRunner interface {
+	Run(context.Context, string, map[string]string) (runtimeutil.Result, error)
+}
 
 // Request is the complete, immutable input for one Provider capability.
 type Request struct {

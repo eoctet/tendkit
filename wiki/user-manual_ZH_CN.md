@@ -143,6 +143,9 @@ tendkit --config ./custom/config.json --lock ./locks/tendkit.lock
 | Go | `GOBIN` / `GOPATH/bin` 中的已安装工具 |
 | uv | uv 管理的工具 |
 | Ruby | 已安装 gem |
+| Homebrew formula | 使用 Homebrew formula 安装的包 |
+| Homebrew cask | 使用 Homebrew cask 安装的macOS应用 |
+| Cargo | Cargo cli 管理的包 |
 
 包扫描不覆盖项目内依赖、虚拟环境或单独项目环境。某个包管理器不存在或返回不完整清单时，其他扫描域仍可继续，已有纳管项目也不会仅因此被删除。
 
@@ -170,6 +173,8 @@ TendKit 先读取当前版本，再通过 Provider 获取最新版本并比较�
 | `go` | Go 运行时或 Go 工具 |
 | `node_lts` | 最新 Node.js LTS |
 | `sparkle` | macOS Sparkle appcast |
+| `homebrew` | Homebrew formula/cask |
+| `cargo` | Cargo binary crate |
 
 Provider 能检查最新版，不代表一定能自动更新。`provider.actions` 可以逐项覆盖内置能力。
 

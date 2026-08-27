@@ -1,14 +1,36 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/eoctet/tendkit/pkg/version"
 )
+
+func verifyInstallOwnership(path, root string) error {
+	path, root = strings.TrimSpace(path), strings.TrimSpace(root)
+	if path == "" || root == "" {
+		return errors.New("installation path or root missing")
+	}
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	relative, err := filepath.Rel(realRoot, realPath)
+	if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || relative == ".." {
+		return errors.New("installation path is outside manager root")
+	}
+	return nil
+}
 
 func trustedDownloadURL(endpoint, candidate string) (string, error) {
 	source, err := url.Parse(endpoint)

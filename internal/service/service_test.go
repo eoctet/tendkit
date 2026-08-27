@@ -19,6 +19,7 @@ import (
 
 	"github.com/eoctet/tendkit/internal/config"
 	"github.com/eoctet/tendkit/internal/model"
+	providerpkg "github.com/eoctet/tendkit/internal/updater/provider"
 	"github.com/eoctet/tendkit/pkg/i18n"
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 )
@@ -661,6 +662,86 @@ func TestSaveScanSnapshotPersistsMatchingBase(t *testing.T) {
 	}
 	if savedCatalog.Settings.Language != changedLanguage {
 		t.Fatalf("scan snapshot was not persisted: %#v", savedCatalog.Settings)
+	}
+}
+
+func TestCargoScanCandidateCanBeAcceptedAndSavedDisabledWithCurrentVersion(t *testing.T) {
+	directory := t.TempDir()
+	bin := filepath.Join(directory, "bin")
+	root := filepath.Join(directory, "cargo-root")
+	binary := filepath.Join(root, "bin", "sample")
+	realBinary := filepath.Join(root, "bin", "sample-real")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(realBinary, []byte("fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realBinary, binary); err != nil {
+		t.Fatal(err)
+	}
+	cargo := filepath.Join(bin, "cargo")
+	if err := os.WriteFile(cargo, []byte("#!/bin/sh\nif [ \"$1 $2\" = \"install --list\" ]; then printf 'sample v1.2.3:\\n    sample\\n'; exit 0; fi\nexit 91\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("CARGO_INSTALL_ROOT", root)
+	t.Setenv("CARGO_HOME", filepath.Join(directory, "cargo-home"))
+	store := testStore(directory)
+	catalog := scanTestCatalog()
+	catalog.Settings.LogDir = filepath.Join(directory, "logs")
+	catalog.Settings.Scan.Path = false
+	catalog.Settings.Scan.Application = false
+	catalog.Settings.Scan.Packages = model.PackageScanSettings{Cargo: true}
+	catalog.Apps = nil
+	saveTestConfig(t, store, catalog)
+	service := &Service{config: store, GitHubResolver: noGitHubResolver{}}
+	preview, err := service.PreviewScan(context.Background(), ScanObserver{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Config.Apps) != 1 {
+		t.Fatalf("Cargo preview apps=%#v", preview.Config.Apps)
+	}
+	candidate := preview.Config.Apps[0]
+	if candidate.Provider.Type != model.ProviderCargo || candidate.Enabled || candidate.UpdateMode != model.ModeCheck || candidate.StatusManaged.CurrentVersion != "1.2.3" {
+		t.Fatalf("Cargo candidate=%#v", candidate)
+	}
+	if err := service.SaveScanSnapshot(preview.BaseConfig, preview.Config); err != nil {
+		t.Fatalf("SaveScanSnapshot() error=%v", err)
+	}
+	saved, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Apps) != 1 || saved.Apps[0].Enabled || saved.Apps[0].StatusManaged.CurrentVersion != "1.2.3" {
+		t.Fatalf("saved Cargo candidate=%#v", saved.Apps)
+	}
+	savedApp := saved.Apps[0]
+	canonicalBinary, err := filepath.EvalSymlinks(realBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if savedApp.InstallPath != canonicalBinary {
+		t.Fatalf("saved Cargo install path=%q want=%q", savedApp.InstallPath, canonicalBinary)
+	}
+	if savedApp.Environment["CARGO_INSTALL_ROOT"] != root || !strings.HasPrefix(savedApp.Environment["PATH"], bin) || len(savedApp.Environment) != 2 {
+		t.Fatalf("saved Cargo environment=%#v", savedApp.Environment)
+	}
+	registry := providerpkg.NewRegistry()
+	if err := providerpkg.RegisterBuiltins(registry, nil, nil, runtimeutil.Runner{}); err != nil {
+		t.Fatal(err)
+	}
+	capabilities, ok := registry.Resolve(string(model.ProviderCargo))
+	if !ok || capabilities.Current == nil {
+		t.Fatalf("Cargo capabilities=%#v", capabilities)
+	}
+	current, err := capabilities.Current.Current(context.Background(), providerpkg.Request{App: savedApp})
+	if err != nil || current != "1.2.3" {
+		t.Fatalf("saved Cargo Current=%q error=%v", current, err)
 	}
 }
 

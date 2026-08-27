@@ -36,7 +36,8 @@ func TestUpdateModeAndProviderTypeValidity(t *testing.T) {
 		{"empty mode", UpdateMode("").Valid() == false}, {"unknown mode", UpdateMode("later").Valid() == false},
 		{"default provider", ProviderDefault.Valid()}, {"github release", ProviderGitHubRelease.Valid()}, {"github tag", ProviderGitHubTag.Valid()},
 		{"npm", ProviderNPM.Valid()}, {"pypi", ProviderPyPI.Valid()}, {"uv", ProviderUV.Valid()}, {"jetbrains", ProviderJetBrains.Valid()}, {"go", ProviderGo.Valid()},
-		{"node lts", ProviderNodeLTS.Valid()}, {"sparkle", ProviderSparkle.Valid()}, {"unknown provider", ProviderType("custom").Valid() == false},
+		{"node lts", ProviderNodeLTS.Valid()}, {"sparkle", ProviderSparkle.Valid()}, {"homebrew", ProviderHomebrew.Valid()}, {"cargo", ProviderCargo.Valid()},
+		{"unknown provider", ProviderType("custom").Valid() == false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if !test.valid {

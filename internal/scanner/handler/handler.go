@@ -12,13 +12,16 @@ import (
 type Domain string
 
 const (
-	Path   Domain = "path"
-	MacApp Domain = "macapp"
-	Python Domain = "python"
-	Node   Domain = "node"
-	UV     Domain = "uv"
-	Go     Domain = "go"
-	Ruby   Domain = "ruby"
+	Path            Domain = "path"
+	MacApp          Domain = "macapp"
+	Python          Domain = "python"
+	Node            Domain = "node"
+	UV              Domain = "uv"
+	Go              Domain = "go"
+	Ruby            Domain = "ruby"
+	HomebrewFormula Domain = "homebrew-formula"
+	HomebrewCask    Domain = "homebrew-cask"
+	Cargo           Domain = "cargo"
 )
 
 type Progress struct{ Stage, Subject string }
@@ -31,6 +34,22 @@ type Candidate struct {
 	CurrentVersion string
 	ObservationErr error
 	Aliases        []string
+	// Evidence is scan-session-only ownership evidence. It is intentionally not
+	// copied into model.Application or persisted JSON.
+	Evidence *InstallationEvidence
+}
+
+// InstallationEvidence identifies paths a package manager can prove it owns.
+// Scanner uses it only after every enabled ecosystem has reported its snapshot.
+type InstallationEvidence struct {
+	Source           string
+	Package          string
+	ExecutablePaths  []string
+	ApplicationPaths []string
+	InstallRoot      string
+	// Ambiguity identifies a complete inventory whose owner cannot safely be
+	// folded into one canonical product. Scanner reports it per ownership group.
+	Ambiguity string
 }
 type Result struct {
 	Candidates []Candidate

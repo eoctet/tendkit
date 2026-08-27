@@ -281,6 +281,9 @@ func configRows(catalog *model.Config) []configRow {
 		configRow{key: "scan_go", label: i18n.T("tui.config.scan_go"), value: boolText(catalog.Settings.Scan.Packages.Go), rowType: configRowBoolean, section: configSectionScan},
 		configRow{key: "scan_uv", label: i18n.T("tui.config.scan_uv"), value: boolText(catalog.Settings.Scan.Packages.UV), rowType: configRowBoolean, section: configSectionScan},
 		configRow{key: "scan_ruby", label: i18n.T("tui.config.scan_ruby"), value: boolText(catalog.Settings.Scan.Packages.Ruby), rowType: configRowBoolean, section: configSectionScan},
+		configRow{key: "scan_homebrew_formula", label: i18n.T("tui.config.scan_homebrew_formula"), value: boolText(catalog.Settings.Scan.Packages.HomebrewFormula), rowType: configRowBoolean, section: configSectionScan},
+		configRow{key: "scan_homebrew_cask", label: i18n.T("tui.config.scan_homebrew_cask"), value: boolText(catalog.Settings.Scan.Packages.HomebrewCask), rowType: configRowBoolean, section: configSectionScan},
+		configRow{key: "scan_cargo", label: i18n.T("tui.config.scan_cargo"), value: boolText(catalog.Settings.Scan.Packages.Cargo), rowType: configRowBoolean, section: configSectionScan},
 		configRow{key: "scan_bundle_id", label: i18n.T("tui.config.scan_bundle_id"), value: strings.Join(catalog.Settings.Scan.BundleID, ", "), rowType: configRowList, section: configSectionScan},
 		configRow{key: "scan_exclude", label: i18n.T("tui.config.scan_exclude"), value: strings.Join(catalog.Settings.Scan.Exclude, ", "), rowType: configRowList, section: configSectionScan},
 	)
@@ -383,7 +386,7 @@ func applicationTypeChoices(current string) []string {
 
 func providerChoices(current string) []string {
 	return includeCurrentChoice([]string{
-		string(model.ProviderDefault), string(model.ProviderGitHubRelease), string(model.ProviderGitHubTag), string(model.ProviderNPM), string(model.ProviderPyPI), string(model.ProviderUV), string(model.ProviderJetBrains), string(model.ProviderGo), string(model.ProviderNodeLTS), string(model.ProviderSparkle),
+		string(model.ProviderDefault), string(model.ProviderGitHubRelease), string(model.ProviderGitHubTag), string(model.ProviderNPM), string(model.ProviderPyPI), string(model.ProviderUV), string(model.ProviderJetBrains), string(model.ProviderGo), string(model.ProviderNodeLTS), string(model.ProviderSparkle), string(model.ProviderHomebrew), string(model.ProviderCargo),
 	}, current)
 }
 
@@ -679,6 +682,12 @@ func setSettingsConfigValue(catalog *model.Config, row configRow, value string) 
 		catalog.Settings.Scan.Packages.UV = boolean
 	case "scan_ruby":
 		catalog.Settings.Scan.Packages.Ruby = boolean
+	case "scan_homebrew_formula":
+		catalog.Settings.Scan.Packages.HomebrewFormula = boolean
+	case "scan_homebrew_cask":
+		catalog.Settings.Scan.Packages.HomebrewCask = boolean
+	case "scan_cargo":
+		catalog.Settings.Scan.Packages.Cargo = boolean
 	case "scan_bundle_id":
 		catalog.Settings.Scan.BundleID = parseTUIList(value)
 	case "scan_exclude":

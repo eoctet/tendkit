@@ -98,11 +98,13 @@ func RegisterBuiltins(registry *Registry, source *HTTPSource, endpoints map[stri
 		name           string
 		implementation any
 	}{
-		{string(model.ProviderGitHubRelease), GitHubReleaseProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubRelease)]}}, {string(model.ProviderGitHubTag), GitHubTagProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubTag)]}}, {string(model.ProviderNPM), NPMProvider{Source: source, Endpoint: endpoints[string(model.ProviderNPM)]}}, {string(model.ProviderPyPI), PyPIProvider{Source: source, Endpoint: endpoints[string(model.ProviderPyPI)]}}, {string(model.ProviderUV), UVProvider{Runner: runner}}, {string(model.ProviderJetBrains), JetBrainsProvider{Source: source, Endpoint: endpoints[string(model.ProviderJetBrains)]}}, {string(model.ProviderGo), GoProvider{Source: source, Endpoint: endpoints[string(model.ProviderGo)], Runner: runner}}, {string(model.ProviderNodeLTS), NodeLTSProvider{Source: source, Endpoint: endpoints[string(model.ProviderNodeLTS)]}}, {string(model.ProviderSparkle), SparkleProvider{Source: source, Runner: runner}},
+		{string(model.ProviderGitHubRelease), GitHubReleaseProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubRelease)]}}, {string(model.ProviderGitHubTag), GitHubTagProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubTag)]}}, {string(model.ProviderNPM), NPMProvider{Source: source, Endpoint: endpoints[string(model.ProviderNPM)]}}, {string(model.ProviderPyPI), PyPIProvider{Source: source, Endpoint: endpoints[string(model.ProviderPyPI)]}}, {string(model.ProviderUV), UVProvider{Runner: runner}}, {string(model.ProviderJetBrains), JetBrainsProvider{Source: source, Endpoint: endpoints[string(model.ProviderJetBrains)]}}, {string(model.ProviderGo), GoProvider{Source: source, Endpoint: endpoints[string(model.ProviderGo)], Runner: runner}}, {string(model.ProviderNodeLTS), NodeLTSProvider{Source: source, Endpoint: endpoints[string(model.ProviderNodeLTS)]}}, {string(model.ProviderSparkle), SparkleProvider{Source: source, Runner: runner}}, {string(model.ProviderHomebrew), HomebrewProvider{Runner: runner}}, {string(model.ProviderCargo), CargoProvider{Runner: runner}},
 	}
 	for _, builtin := range builtins {
 		capabilities := DetectCapabilities(builtin.implementation)
-		capabilities.Current = localCurrent
+		if capabilities.Current == nil {
+			capabilities.Current = localCurrent
+		}
 		switch model.ProviderType(builtin.name) {
 		case model.ProviderNPM, model.ProviderPyPI, model.ProviderUV, model.ProviderGo:
 			capabilities.Update = packageUpdate

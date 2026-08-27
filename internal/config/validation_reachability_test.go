@@ -11,12 +11,19 @@ func TestEnabledProviderModeReachabilityMatrix(t *testing.T) {
 		model.ProviderDefault, model.ProviderGitHubRelease, model.ProviderGitHubTag,
 		model.ProviderNPM, model.ProviderPyPI, model.ProviderJetBrains,
 		model.ProviderGo, model.ProviderNodeLTS, model.ProviderSparkle,
+		model.ProviderHomebrew, model.ProviderCargo,
 	}
 	for _, provider := range providers {
 		for _, mode := range []model.UpdateMode{model.ModeCheck, model.ModeAuto, model.ModeDownload, model.ModeInstall} {
 			t.Run(string(provider)+"/"+string(mode), func(t *testing.T) {
 				app := reachableModeApp(provider, mode, true)
 				wantValid := mode != model.ModeInstall || provider == model.ProviderDefault
+				if mode == model.ModeDownload && (provider == model.ProviderHomebrew || provider == model.ProviderCargo) {
+					wantValid = false
+				}
+				if provider == model.ProviderCargo {
+					wantValid = false
+				}
 				if err := validateConfig(configWithApp(app)); (err == nil) != wantValid {
 					t.Fatalf("ValidateConfig(%s/%s) error = %v, valid=%t", provider, mode, err, wantValid)
 				}
@@ -48,6 +55,31 @@ func TestEnabledDefaultRequiresLatestAndDisabledDefaultMayBeUnreachable(t *testi
 				t.Fatalf("ValidateConfig() error = %v, valid=%t", err, test.valid)
 			}
 		})
+	}
+}
+
+func TestCargoRequiresExplicitCheckAndUpdateActions(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func(t *testing.T) {
+			app := reachableModeApp(model.ProviderCargo, model.ModeCheck, enabled)
+			app.Provider.Actions = nil
+			err := validateConfig(configWithApp(app))
+			if enabled && err == nil {
+				t.Fatal("enabled Cargo check without explicit action was accepted")
+			}
+			if !enabled && err != nil {
+				t.Fatalf("disabled Cargo inventory candidate was rejected: %v", err)
+			}
+		})
+	}
+	auto := reachableModeApp(model.ProviderCargo, model.ModeAuto, true)
+	auto.Provider.Actions = nil
+	if err := validateConfig(configWithApp(auto)); err == nil {
+		t.Fatal("Cargo auto without explicit update action was accepted")
+	}
+	auto.Provider.Actions = &model.ProviderActions{Check: "cargo check sample", Update: "cargo install sample"}
+	if err := validateConfig(configWithApp(auto)); err != nil {
+		t.Fatalf("Cargo auto with explicit update action was rejected: %v", err)
 	}
 }
 

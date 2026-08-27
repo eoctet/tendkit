@@ -38,7 +38,7 @@ TendKit 继续使用现有包管理器和更新方式。它提供统一的查看
 | **配置或盘点开发机** | 扫描一次，得到可审核的工具清单，不再逐个开发环境手工排查。                 |
 | **日常维护**         | 一次检查所有已纳管工具，只关注真正有新版本的项目。                     |
 | **保护稳定环境**     | 逐项查看结果，只更新选中的工具，避免盲目批量升级。                     |
-| **混合安装来源**     | 在一个界面查看 PATH 工具、全局 npm/Python/Go/uv/Ruby 包和 macOS 应用。 |
+| **混合安装来源**     | 在一个界面查看 PATH 工具、Homebrew、全局 npm/Python/Go/uv/Ruby/Cargo 包和 macOS 应用。 |
 
 ## 🧭 工作方式
 
@@ -90,10 +90,10 @@ TUI 启动后会创建 `~/.config/tendkit/config.json` 及其父目录，不会�
 TendKit 可以扫描并且识别：
 
 - `PATH` 中受支持的开发 CLI；
-- npm、Python、Go、uv 和 Ruby 管理的全局包；
+- Homebrew formula/cask、npm、Python、Go、uv、Ruby 和 Cargo 管理的全局包；
 - macOS 中 `/Applications` 和 `~/Applications` 下的开发应用。
 
-它可以通过 GitHub Releases 与 tags、npm、PyPI、uv、JetBrains、Go、Node.js、Sparkle feed 和自定义命令检查版本。具体能力取决于工具或包管理器能够提供的信息。当前不扫描项目内依赖和虚拟环境。
+它可以通过 GitHub Releases 与 tags、Homebrew、npm、PyPI、uv、JetBrains、Go、Node.js、Sparkle feed、Cargo 和自定义命令检查版本。具体能力取决于工具或包管理器能够提供的信息。当前不扫描项目内依赖和虚拟环境。
 
 ## 🛡️ 安全与控制
 

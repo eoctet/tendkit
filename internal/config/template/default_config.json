@@ -37,7 +37,7 @@
         "scan": {
             "path": true,
             "application": true,
-            "packages": {"python": true, "node": true, "go": true, "uv": true, "ruby": true},
+            "packages": {"python": true, "node": true, "go": true, "uv": true, "ruby": true, "homebrew-formula": true, "homebrew-cask": true, "cargo": true},
             "bundle_id": [],
             "exclude": []
         }

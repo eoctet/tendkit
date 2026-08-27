@@ -65,11 +65,13 @@ const (
 	ProviderGo            ProviderType = "go"
 	ProviderNodeLTS       ProviderType = "node_lts"
 	ProviderSparkle       ProviderType = "sparkle"
+	ProviderHomebrew      ProviderType = "homebrew"
+	ProviderCargo         ProviderType = "cargo"
 )
 
 func (p ProviderType) Valid() bool {
 	switch p {
-	case ProviderDefault, ProviderGitHubRelease, ProviderGitHubTag, ProviderNPM, ProviderPyPI, ProviderUV, ProviderJetBrains, ProviderGo, ProviderNodeLTS, ProviderSparkle:
+	case ProviderDefault, ProviderGitHubRelease, ProviderGitHubTag, ProviderNPM, ProviderPyPI, ProviderUV, ProviderJetBrains, ProviderGo, ProviderNodeLTS, ProviderSparkle, ProviderHomebrew, ProviderCargo:
 		return true
 	default:
 		return false

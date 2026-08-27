@@ -797,6 +797,84 @@ func TestLoadConfigRequiresEveryScanSwitch(t *testing.T) {
 	}
 }
 
+func TestLoadConfigPackageManagerScanSwitchCompatibility(t *testing.T) {
+	const (
+		homebrewFormula = "homebrew-formula"
+		homebrewCask    = "homebrew-cask"
+		cargo           = "cargo"
+	)
+	newDocument := func(t *testing.T) map[string]any {
+		t.Helper()
+		data, err := json.Marshal(defaultConfig())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]any
+		if err := json.Unmarshal(data, &document); err != nil {
+			t.Fatal(err)
+		}
+		return document
+	}
+	load := func(t *testing.T, document map[string]any) (model.Config, error) {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(path, mustMarshalJSON(t, document), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		store := newStore(path, path+".lock")
+		return store.load()
+	}
+
+	t.Run("default template enables all new ecosystems", func(t *testing.T) {
+		packages := defaultConfig().Settings.Scan.Packages
+		if !packages.HomebrewFormula || !packages.HomebrewCask || !packages.Cargo {
+			t.Fatalf("default package scan settings=%#v", packages)
+		}
+	})
+
+	t.Run("legacy JSON omits new switches", func(t *testing.T) {
+		document := newDocument(t)
+		packages := document["settings"].(map[string]any)["scan"].(map[string]any)["packages"].(map[string]any)
+		delete(packages, homebrewFormula)
+		delete(packages, homebrewCask)
+		delete(packages, cargo)
+		catalog, err := load(t, document)
+		if err != nil {
+			t.Fatalf("legacy config was rejected: %v", err)
+		}
+		loaded := catalog.Settings.Scan.Packages
+		if loaded.HomebrewFormula || loaded.HomebrewCask || loaded.Cargo {
+			t.Fatalf("legacy config silently enabled new scans: %#v", loaded)
+		}
+	})
+
+	t.Run("new switches parse normally", func(t *testing.T) {
+		document := newDocument(t)
+		packages := document["settings"].(map[string]any)["scan"].(map[string]any)["packages"].(map[string]any)
+		packages[homebrewFormula] = false
+		packages[homebrewCask] = true
+		packages[cargo] = false
+		catalog, err := load(t, document)
+		if err != nil {
+			t.Fatalf("new scan switches were rejected: %v", err)
+		}
+		loaded := catalog.Settings.Scan.Packages
+		if loaded.HomebrewFormula || !loaded.HomebrewCask || loaded.Cargo {
+			t.Fatalf("new scan switches parsed incorrectly: %#v", loaded)
+		}
+	})
+
+	t.Run("unknown package switch remains rejected", func(t *testing.T) {
+		document := newDocument(t)
+		packages := document["settings"].(map[string]any)["scan"].(map[string]any)["packages"].(map[string]any)
+		packages["future-manager"] = true
+		_, err := load(t, document)
+		if err == nil || !strings.Contains(err.Error(), "unknown field") || !strings.Contains(err.Error(), "future-manager") {
+			t.Fatalf("unknown scan switch was not strictly rejected: %v", err)
+		}
+	})
+}
+
 func TestValidateConfigRejectsOutOfRangeGlobalTimeout(t *testing.T) {
 	for _, timeout := range []int{0, maxTimeoutSeconds + 1} {
 		catalog := defaultConfig()
@@ -1054,7 +1132,7 @@ func TestValidateConfigRejectsUnsafeDownloaderArguments(t *testing.T) {
 func TestValidateConfigAcceptsExactlyTargetProviders(t *testing.T) {
 	for _, providerType := range []model.ProviderType{
 		model.ProviderDefault, model.ProviderGitHubRelease, model.ProviderGitHubTag, model.ProviderNPM, model.ProviderPyPI,
-		model.ProviderJetBrains, model.ProviderGo, model.ProviderNodeLTS, model.ProviderSparkle,
+		model.ProviderJetBrains, model.ProviderGo, model.ProviderNodeLTS, model.ProviderSparkle, model.ProviderHomebrew, model.ProviderCargo,
 	} {
 		t.Run(string(providerType), func(t *testing.T) {
 			catalog := defaultConfig()
@@ -1068,6 +1146,8 @@ func TestValidateConfigAcceptsExactlyTargetProviders(t *testing.T) {
 			}
 			if providerType == model.ProviderDefault {
 				application.Provider = providerConfig(providerType, "", "check", "", nil, "")
+			} else if providerType == model.ProviderCargo {
+				application.Provider.Actions = &model.ProviderActions{Check: "check"}
 			}
 			catalog.Apps = []model.Application{application}
 			if err := validateConfig(catalog); err != nil {

@@ -90,6 +90,8 @@ func TestBuiltinCapabilityMatrix(t *testing.T) {
 		"node_lts":       {current: true, latest: true, download: true},
 		"sparkle":        {current: true, latest: true, update: true, download: true, artifact: true},
 		"uv":             {current: true, latest: true, update: true},
+		"homebrew":       {current: true, latest: true, update: true},
+		"cargo":          {current: true},
 	}
 	for name, expected := range want {
 		capabilities, ok := registry.Resolve(name)
