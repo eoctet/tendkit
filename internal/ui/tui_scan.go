@@ -1271,16 +1271,32 @@ func scanDisplayApps(view *tuiModel) []model.Application {
 	for _, application := range apps {
 		known[application.ID] = true
 	}
-	added := make([]model.Application, 0)
+	type addedApplication struct {
+		application model.Application
+		key         string
+	}
+	added := make([]addedApplication, 0)
 	for id, application := range view.scanProposed {
 		if !known[id] && !view.scanIgnored[id] {
-			added = append(added, application)
+			added = append(added, addedApplication{application: application, key: id})
 		}
 	}
 	sort.Slice(added, func(left, right int) bool {
-		return strings.ToLower(added[left].Name) < strings.ToLower(added[right].Name)
+		leftApp, rightApp := added[left].application, added[right].application
+		if leftName, rightName := strings.ToLower(leftApp.Name), strings.ToLower(rightApp.Name); leftName != rightName {
+			return leftName < rightName
+		}
+		if leftApp.ID != rightApp.ID {
+			return leftApp.ID < rightApp.ID
+		}
+		if leftApp.InstallPath != rightApp.InstallPath {
+			return leftApp.InstallPath < rightApp.InstallPath
+		}
+		return added[left].key < added[right].key
 	})
-	apps = append(apps, added...)
+	for _, application := range added {
+		apps = append(apps, application.application)
+	}
 	return apps
 }
 

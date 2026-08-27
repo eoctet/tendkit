@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/eoctet/tendkit/internal/model"
+	"github.com/eoctet/tendkit/internal/scanner/builtin"
 )
 
 // mergeApps preserves user-owned configuration while allowing scan-managed
@@ -20,6 +21,14 @@ func mergeApps(existing, discovered []model.Application) []model.Application {
 	}
 	for _, found := range discovered {
 		if configured, exists := byID[found.ID]; exists {
+			if definition, refresh := refreshableBuiltInPathInstance(configured, found); refresh {
+				actionConfig(&configured).Version = found.Provider.VersionAction()
+				if pathInstanceExtendedID(definition.ID, found.ID) && configured.Provider.Type == found.Provider.Type {
+					actionConfig(&configured).Check = found.Provider.CheckAction()
+					actionConfig(&configured).Update = found.Provider.UpdateAction()
+					configured.UpdateMode = found.UpdateMode
+				}
+			}
 			if shouldCanonicalizeManagedPackage(configured, found) {
 				configured.Name = found.Name
 				configured.Type = found.Type
@@ -78,6 +87,15 @@ func mergeApps(existing, discovered []model.Application) []model.Application {
 		apps = append(apps, byID[id])
 	}
 	return apps
+}
+
+func refreshableBuiltInPathInstance(configured, found model.Application) (builtin.PathDefinition, bool) {
+	if !configured.ScanManaged || found.Type != model.ApplicationTypeCLI || configured.InstallPath == "" || found.InstallPath == "" || canonicalPath(configured.InstallPath) != canonicalPath(found.InstallPath) {
+		return builtin.PathDefinition{}, false
+	}
+	configuredDefinition, configuredOK := matchingBuiltInPathDefinition(configured)
+	foundDefinition, foundOK := matchingBuiltInPathDefinition(found)
+	return foundDefinition, configuredOK && foundOK && configuredDefinition.ID == foundDefinition.ID
 }
 
 func shouldCanonicalizeManagedPackage(configured, found model.Application) bool {

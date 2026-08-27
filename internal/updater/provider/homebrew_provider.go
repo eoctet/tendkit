@@ -24,6 +24,9 @@ type HomebrewProvider struct {
 }
 
 func managerPath(name string, environment map[string]string, lookup func(string, map[string]string) (string, error)) (string, error) {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return "", errors.New("invalid manager executable name")
+	}
 	if lookup != nil {
 		return lookup(name, environment)
 	}
@@ -33,6 +36,7 @@ func managerPath(name string, environment map[string]string, lookup func(string,
 	}
 	for _, directory := range filepath.SplitList(path) {
 		candidate := filepath.Join(directory, name)
+		// #nosec G703 -- directory is intentionally sourced from PATH; name is restricted to a single basename above.
 		info, err := os.Stat(candidate)
 		if err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
 			return filepath.Abs(candidate)

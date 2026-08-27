@@ -159,7 +159,9 @@ func (s Scanner) discoverTargetApplication(ctx context.Context, target model.App
 	if target.Type != model.ApplicationTypeCLI && target.Type != model.ApplicationTypeSDK {
 		return discovery{}, false, nil
 	}
-	candidate, found, err := handler.NewPath(s.Runner, builtin.PathDefinitions()).ScanApplication(ctx, target, handler.Request{})
+	candidate, found, err := handler.NewPath(s.Runner, builtin.PathDefinitions()).ScanApplication(ctx, target, handler.Request{
+		Diagnostic: func(diagnostic handler.Diagnostic) { s.reportDiagnostic(Diagnostic(diagnostic)) },
+	})
 	if err != nil || !found {
 		return discovery{}, found, err
 	}

@@ -3,7 +3,10 @@ package handler
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/eoctet/tendkit/internal/model"
@@ -20,20 +23,6 @@ func TestAllBuiltinPathDefinitionsUseNormalizedCLIIdentity(t *testing.T) {
 	for _, definition := range builtin.PathDefinitions() {
 		got := identity(model.Application{Name: definition.Name, Type: model.ApplicationTypeCLI, Provider: model.ProviderConfig{Type: definition.Provider}, Package: definition.Package})
 		want := "cli:" + model.NormalizeIdentityName(definition.Name)
-		switch definition.Provider {
-		case model.ProviderNPM:
-			if definition.Package != "" {
-				want = model.PackageIdentity("node", definition.Package)
-			}
-		case model.ProviderPyPI:
-			if definition.Package != "" {
-				want = model.PackageIdentity("python", definition.Package)
-			}
-		case model.ProviderGo:
-			if definition.Package != "" {
-				want = model.PackageIdentity("go", definition.Package)
-			}
-		}
 		if got != want {
 			t.Fatalf("%s identity=%q want=%q", definition.ID, got, want)
 		}
@@ -44,10 +33,10 @@ func TestAllBuiltinPathDefinitionsUseNormalizedCLIIdentity(t *testing.T) {
 	}{
 		{model.Application{Name: "Git", Provider: model.ProviderConfig{Type: model.ProviderGitHubTag}, Package: "git/git"}, "cli:git"},
 		{model.Application{Name: "kubectl", Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease}, Package: "kubernetes/kubernetes"}, "cli:kubectl"},
-		{model.Application{Name: "Codex", Provider: model.ProviderConfig{Type: model.ProviderNPM}, Package: "@openai/codex"}, "package:node:openai-codex"},
-		{model.Application{Name: "Py", Provider: model.ProviderConfig{Type: model.ProviderPyPI}, Package: "foo.bar"}, "package:python:foobar"},
-		{model.Application{Name: "Py", Provider: model.ProviderConfig{Type: model.ProviderPyPI}, Package: "foo_bar"}, "package:python:foobar"},
-		{model.Application{Name: "Tool", Provider: model.ProviderConfig{Type: model.ProviderGo}, Package: "github.com/acme/tool/cmd/tool"}, "package:go:tool"},
+		{model.Application{Name: "Codex", Provider: model.ProviderConfig{Type: model.ProviderNPM}, Package: "@openai/codex"}, "cli:codex"},
+		{model.Application{Name: "Py", Provider: model.ProviderConfig{Type: model.ProviderPyPI}, Package: "foo.bar"}, "cli:py"},
+		{model.Application{Name: "Py", Provider: model.ProviderConfig{Type: model.ProviderPyPI}, Package: "foo_bar"}, "cli:py"},
+		{model.Application{Name: "Tool", Provider: model.ProviderConfig{Type: model.ProviderGo}, Package: "github.com/acme/tool/cmd/tool"}, "cli:tool"},
 	} {
 		if got := identity(test.app); got != test.want {
 			t.Fatalf("PATH identity=%q want=%q", got, test.want)
@@ -71,12 +60,12 @@ func (r *stubRunner) Run(_ context.Context, script string, _ map[string]string) 
 
 func newPathHandler(r Runner, definitions []builtin.PathDefinition, paths map[string]string) *PathHandler {
 	handler := NewPath(r, definitions)
-	handler.lookPath = func(binary string) (string, error) {
+	handler.lookPaths = func(binary string) ([]string, error) {
 		path, ok := paths[binary]
 		if !ok {
-			return "", ErrNotFound
+			return nil, ErrNotFound
 		}
-		return path, nil
+		return []string{path}, nil
 	}
 	return handler
 }
@@ -88,8 +77,8 @@ func TestPathHandlerScanPreservesDefinitionOrderReportsProgressAndSkipsMissing(t
 		{ID: "last", Name: "Last", Binary: "last", VersionCommand: "last --version", Provider: model.ProviderDefault},
 	}
 	runner := &stubRunner{responses: map[string]runnerResponse{
-		"first --version": {result: runtimeutil.Result{Stdout: "first version v1.2.3\n"}},
-		"last --version":  {result: runtimeutil.Result{Stdout: "last 4.5.6\n"}},
+		"/fixture/first --version": {result: runtimeutil.Result{Stdout: "first version v1.2.3\n"}},
+		"/fixture/last --version":  {result: runtimeutil.Result{Stdout: "last 4.5.6\n"}},
 	}}
 	handler := newPathHandler(runner, definitions, map[string]string{"first": "/fixture/first", "last": "/fixture/last"})
 	var progress []Progress
@@ -113,7 +102,7 @@ func TestPathHandlerScanPreservesDefinitionOrderReportsProgressAndSkipsMissing(t
 	if first.CurrentVersion != "1.2.3" || first.Application.Description != definitions[0].Description {
 		t.Fatalf("first candidate = %#v", first)
 	}
-	if !reflect.DeepEqual(runner.calls, []string{"first --version", "last --version"}) {
+	if !reflect.DeepEqual(runner.calls, []string{"/fixture/first --version", "/fixture/last --version"}) {
 		t.Fatalf("runner calls = %v", runner.calls)
 	}
 	if result.Candidates[1].Application.Description != definitions[2].Description {
@@ -139,7 +128,7 @@ func TestPathHandlerVersionObservations(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runner := &stubRunner{responses: map[string]runnerResponse{"tool --version": test.response}}
+			runner := &stubRunner{responses: map[string]runnerResponse{"/fixture/tool --version": test.response}}
 			handler := newPathHandler(runner, []builtin.PathDefinition{definition}, map[string]string{"tool": "/fixture/tool"})
 			candidate, found, err := handler.ScanApplication(context.Background(), model.Application{ID: "cli-tool", Type: model.ApplicationTypeCLI}, Request{})
 			if err != nil || !found {
@@ -180,18 +169,18 @@ func TestPathHandlerConfiguresDownloadAndUpdateModes(t *testing.T) {
 			name:       "download configuration wins",
 			definition: builtin.PathDefinition{ID: "download", Name: "Download", Binary: "download", VersionCommand: "download --version", UpdateCommand: "download update", UpdateProbe: "download update --help", Provider: model.ProviderGitHubRelease, DownloadURL: "https://example.invalid/download.tgz", DownloadFilename: "download.tgz"},
 			responses:  map[string]runnerResponse{"download --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}},
-			wantMode:   model.ModeDownload, wantUpdate: "download update", wantDL: true,
+			wantMode:   model.ModeDownload, wantUpdate: "/fixture/download update", wantDL: true,
 		},
 		{
 			name:       "successful probe enables auto",
 			definition: builtin.PathDefinition{ID: "auto", Name: "Auto", Binary: "auto", VersionCommand: "auto --version", UpdateCommand: "auto update", UpdateProbe: "auto update --help", Provider: model.ProviderDefault},
-			responses:  map[string]runnerResponse{"auto --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}, "auto update --help": {result: runtimeutil.Result{}}},
-			wantMode:   model.ModeAuto, wantUpdate: "auto update",
+			responses:  map[string]runnerResponse{"/fixture/auto --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}, "/fixture/auto update --help": {result: runtimeutil.Result{}}},
+			wantMode:   model.ModeAuto, wantUpdate: "/fixture/auto update",
 		},
 		{
 			name:       "failed probe clears update",
 			definition: builtin.PathDefinition{ID: "check", Name: "Check", Binary: "check", VersionCommand: "check --version", UpdateCommand: "check update", UpdateProbe: "check update --help", Provider: model.ProviderDefault},
-			responses:  map[string]runnerResponse{"check --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}, "check update --help": {result: runtimeutil.Result{ExitCode: 1}}},
+			responses:  map[string]runnerResponse{"/fixture/check --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}, "/fixture/check update --help": {result: runtimeutil.Result{ExitCode: 1}}},
 			wantMode:   model.ModeCheck,
 		},
 	}
@@ -218,6 +207,31 @@ func TestPathHandlerConfiguresDownloadAndUpdateModes(t *testing.T) {
 	}
 }
 
+func TestPathHandlerSingleInstanceBindsAllExecutableActions(t *testing.T) {
+	definition := builtin.PathDefinition{
+		ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version",
+		CheckCommand: "tool check", UpdateCommand: "tool update", UpdateProbe: "tool update --help",
+		Provider: model.ProviderDefault,
+	}
+	const executable = "/fixture/tool"
+	runner := &stubRunner{responses: map[string]runnerResponse{
+		executable + " --version":     {result: runtimeutil.Result{Stdout: "1.0.0"}},
+		executable + " update --help": {result: runtimeutil.Result{}},
+	}}
+	handler := newPathHandler(runner, []builtin.PathDefinition{definition}, map[string]string{"tool": executable})
+	result := handler.Scan(context.Background(), Request{})
+	if result.Err != nil || len(result.Candidates) != 1 {
+		t.Fatalf("result = %#v", result)
+	}
+	app := result.Candidates[0].Application
+	if app.Provider.VersionAction() != executable+" --version" || app.Provider.CheckAction() != executable+" check" || app.Provider.UpdateAction() != executable+" update" || app.UpdateMode != model.ModeAuto {
+		t.Fatalf("single-instance actions were not uniformly bound: %#v", app.Provider.Actions)
+	}
+	if !reflect.DeepEqual(runner.calls, []string{executable + " update --help", executable + " --version"}) {
+		t.Fatalf("runner calls = %v", runner.calls)
+	}
+}
+
 func TestPathHandlerScanApplicationMatchesOnlyCLITargets(t *testing.T) {
 	definition := builtin.PathDefinition{ID: "tool-id", Name: "Tool Name", Binary: "tool", VersionCommand: "tool --version", Provider: model.ProviderNPM, Package: "@scope/tool-package"}
 	tests := []struct {
@@ -234,7 +248,7 @@ func TestPathHandlerScanApplicationMatchesOnlyCLITargets(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runner := &stubRunner{responses: map[string]runnerResponse{"tool --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}}}
+			runner := &stubRunner{responses: map[string]runnerResponse{"/fixture/tool --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}}}
 			handler := newPathHandler(runner, []builtin.PathDefinition{definition}, map[string]string{"tool": "/fixture/tool"})
 			_, found, err := handler.ScanApplication(context.Background(), test.target, Request{})
 			if found != test.found || !errors.Is(err, test.err) {
@@ -247,7 +261,7 @@ func TestPathHandlerScanApplicationMatchesOnlyCLITargets(t *testing.T) {
 func TestPathHandlerCancellationAndDefinitionIsolation(t *testing.T) {
 	definitions := []builtin.PathDefinition{{ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version", Provider: model.ProviderDefault}}
 	original := append([]builtin.PathDefinition(nil), definitions...)
-	runner := &stubRunner{responses: map[string]runnerResponse{"tool --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}}}
+	runner := &stubRunner{responses: map[string]runnerResponse{"/fixture/tool --version": {result: runtimeutil.Result{Stdout: "1.0.0"}}}}
 	handler := newPathHandler(runner, definitions, map[string]string{"tool": "/fixture/tool"})
 	definitions[0].Name = "Mutated input"
 	definitions[0].VersionCommand = "mutated --version"
@@ -266,7 +280,172 @@ func TestPathHandlerCancellationAndDefinitionIsolation(t *testing.T) {
 	}
 
 	result = handler.Scan(context.Background(), Request{})
-	if len(result.Candidates) != 1 || result.Candidates[0].Application.Name != "Tool" || !reflect.DeepEqual(runner.calls, []string{"tool --version"}) {
+	if len(result.Candidates) != 1 || result.Candidates[0].Application.Name != "Tool" || !reflect.DeepEqual(runner.calls, []string{"/fixture/tool --version"}) {
 		t.Fatalf("handler retained caller mutation: result=%#v calls=%v", result, runner.calls)
+	}
+}
+
+func TestLookPathsEnumeratesDistinctExecutablesAndDeduplicatesRealPaths(t *testing.T) {
+	root := t.TempDir()
+	firstDir := filepath.Join(root, "first")
+	secondDir := filepath.Join(root, "second")
+	aliasDir := filepath.Join(root, "alias")
+	for _, directory := range []string{firstDir, secondDir, aliasDir} {
+		if err := os.Mkdir(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := filepath.Join(firstDir, "tool")
+	second := filepath.Join(secondDir, "tool")
+	if err := os.WriteFile(first, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(first, filepath.Join(aliasDir, "tool")); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", strings.Join([]string{secondDir, aliasDir, firstDir, secondDir}, string(os.PathListSeparator)))
+	paths, err := defaultLookPaths("tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(aliasDir, "tool"), second}; !reflect.DeepEqual(paths, want) {
+		t.Fatalf("paths = %v, want %v", paths, want)
+	}
+}
+
+func TestPathHandlerScansEveryInstallationWithBoundVersionCommand(t *testing.T) {
+	definition := builtin.PathDefinition{ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version", Provider: model.ProviderDefault}
+	first := "/fixture/first/tool"
+	second := "/fixture/second/tool"
+	runner := &stubRunner{responses: map[string]runnerResponse{
+		first + " --version":  {result: runtimeutil.Result{Stdout: "1.0.0"}},
+		second + " --version": {result: runtimeutil.Result{Stdout: "2.0.0"}},
+	}}
+	handler := NewPath(runner, []builtin.PathDefinition{definition})
+	handler.lookPaths = func(string) ([]string, error) { return []string{second, first}, nil }
+
+	result := handler.Scan(context.Background(), Request{})
+	if result.Err != nil || !result.Complete || len(result.Candidates) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	if got := []string{result.Candidates[0].Application.InstallPath, result.Candidates[1].Application.InstallPath}; !reflect.DeepEqual(got, []string{first, second}) {
+		t.Fatalf("candidate paths = %v", got)
+	}
+	if got := []string{result.Candidates[0].CurrentVersion, result.Candidates[1].CurrentVersion}; !reflect.DeepEqual(got, []string{"1.0.0", "2.0.0"}) {
+		t.Fatalf("candidate versions = %v", got)
+	}
+	if want := []string{first + " --version", second + " --version"}; !reflect.DeepEqual(runner.calls, want) {
+		t.Fatalf("runner calls = %v, want %v", runner.calls, want)
+	}
+}
+
+func TestBindExecutableUsesShellQuotingAndRejectsUnrelatedCommands(t *testing.T) {
+	bound, err := bindExecutable("tool --version", "tool", "/fixture/Tool Bin/tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "'/fixture/Tool Bin/tool' --version"; bound != want {
+		t.Fatalf("bound = %q, want %q", bound, want)
+	}
+	if _, err := bindExecutable("python3 -m tool", "tool", "/fixture/tool"); err == nil {
+		t.Fatal("unrelated command unexpectedly bound")
+	}
+}
+
+func TestAllBuiltinPathVersionCommandsCanBindToTheirExecutable(t *testing.T) {
+	for _, definition := range builtin.PathDefinitions() {
+		if _, err := bindExecutable(definition.VersionCommand, definition.Binary, "/fixture/"+definition.Binary); err != nil {
+			t.Fatalf("%s version command cannot bind: %v", definition.ID, err)
+		}
+	}
+}
+
+func TestPathHandlerExtendedInstancesDropUnscopedUpdateActions(t *testing.T) {
+	definition := builtin.PathDefinition{
+		ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version",
+		CheckCommand: "python3 -m tool check", UpdateCommand: "python3 -m tool update", UpdateProbe: "python3 -m tool --help",
+		Provider: model.ProviderDefault,
+	}
+	paths := []string{"/fixture/first/tool", "/fixture/second/tool"}
+	runner := &stubRunner{responses: map[string]runnerResponse{
+		paths[0] + " --version": {result: runtimeutil.Result{Stdout: "1.0.0"}},
+		paths[1] + " --version": {result: runtimeutil.Result{Stdout: "2.0.0"}},
+	}}
+	handler := NewPath(runner, []builtin.PathDefinition{definition})
+	handler.lookPaths = func(string) ([]string, error) { return paths, nil }
+	var diagnostics []Diagnostic
+	result := handler.Scan(context.Background(), Request{Diagnostic: func(value Diagnostic) {
+		diagnostics = append(diagnostics, value)
+	}})
+	if result.Err != nil || len(result.Candidates) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	for _, candidate := range result.Candidates {
+		if candidate.Application.Provider.CheckAction() != "" || candidate.Application.Provider.UpdateAction() != "" || candidate.Application.UpdateMode != model.ModeCheck {
+			t.Fatalf("unscoped actions retained: %#v", candidate.Application)
+		}
+	}
+	if len(diagnostics) != 6 {
+		t.Fatalf("diagnostics = %#v, want three skipped actions for each instance", diagnostics)
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Event != "path_action_binding_skipped" || diagnostic.Subject != definition.ID || diagnostic.Err == nil ||
+			!strings.Contains(diagnostic.Detail, "action=") || !strings.Contains(diagnostic.Detail, "path=") {
+			t.Fatalf("diagnostic = %#v", diagnostic)
+		}
+	}
+}
+
+func TestPathHandlerExtendedInstancesBindScopedUpdateActions(t *testing.T) {
+	definition := builtin.PathDefinition{
+		ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version",
+		CheckCommand: "tool check", UpdateCommand: "tool update", UpdateProbe: "tool update --help",
+		Provider: model.ProviderDefault,
+	}
+	paths := []string{"/fixture/first/tool", "/fixture/second/tool"}
+	responses := map[string]runnerResponse{}
+	for index, path := range paths {
+		responses[path+" --version"] = runnerResponse{result: runtimeutil.Result{Stdout: string(rune('1'+index)) + ".0.0"}}
+		responses[path+" update --help"] = runnerResponse{result: runtimeutil.Result{}}
+	}
+	runner := &stubRunner{responses: responses}
+	handler := NewPath(runner, []builtin.PathDefinition{definition})
+	handler.lookPaths = func(string) ([]string, error) { return paths, nil }
+	result := handler.Scan(context.Background(), Request{})
+	if result.Err != nil || len(result.Candidates) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	for _, candidate := range result.Candidates {
+		path := candidate.Application.InstallPath
+		if candidate.Application.Provider.CheckAction() != path+" check" || candidate.Application.Provider.UpdateAction() != path+" update" || candidate.Application.UpdateMode != model.ModeAuto {
+			t.Fatalf("scoped actions not bound: %#v", candidate.Application)
+		}
+	}
+}
+
+func TestPathHandlerScanApplicationUsesConfiguredExtendedInstancePath(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "Tool Bin", "tool")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := "'" + path + "' --version"
+	runner := &stubRunner{responses: map[string]runnerResponse{command: {result: runtimeutil.Result{Stdout: "3.4.5"}}}}
+	handler := NewPath(runner, []builtin.PathDefinition{{ID: "tool", Name: "Tool", Binary: "tool", VersionCommand: "tool --version", Provider: model.ProviderDefault}})
+	handler.lookPaths = func(string) ([]string, error) {
+		t.Fatal("configured extended instance fell back to PATH")
+		return nil, nil
+	}
+	app := model.Application{ID: "cli-tool-deadbeefdeadbeef", Name: "Tool", Type: model.ApplicationTypeCLI, InstallPath: path, Identity: "cli:tool@deadbeefdeadbeef"}
+	candidate, found, err := handler.ScanApplication(context.Background(), app, Request{})
+	if err != nil || !found || candidate.Application.ID != app.ID || candidate.Application.Identity != app.Identity || candidate.CurrentVersion != "3.4.5" {
+		t.Fatalf("candidate=%#v found=%t err=%v", candidate, found, err)
 	}
 }

@@ -57,6 +57,14 @@ func TestHomebrewPackageParserRejectsAmbiguousOrEmptyNames(t *testing.T) {
 	}
 }
 
+func TestManagerPathRejectsNonBasenameExecutable(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "../brew", "bin/brew"} {
+		if _, err := managerPath(name, map[string]string{"PATH": t.TempDir()}, nil); err == nil {
+			t.Fatalf("managerPath(%q) unexpectedly succeeded", name)
+		}
+	}
+}
+
 func TestHomebrewCapabilityMatrix(t *testing.T) {
 	registry := NewRegistry()
 	if err := RegisterBuiltins(registry, nil, nil); err != nil {

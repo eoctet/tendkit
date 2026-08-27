@@ -563,6 +563,29 @@ func TestRedactMasksOnlySensitiveEnvironmentValues(t *testing.T) {
 	}
 }
 
+func TestEngineProviderFailureLogIncludesOuterErrorAndCause(t *testing.T) {
+	directory := t.TempDir()
+	log, err := newLogger(filepath.Join(directory, "logs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := model.Application{ID: "sample", Name: "Sample"}
+	inner := errors.New("metadata command exited with code 23")
+	providerError := &providerpkg.Error{Key: "provider.current_failed", Cause: inner}
+	outer := localizedProviderError{text: "cannot read Sample version", cause: providerError}
+	result := (&engine{logger: log}).fail(app, model.Result{}, model.OperationVersion, outer, 0)
+	if result.Message != outer.Error() || result.State.Error != outer.Error() {
+		t.Fatalf("user-visible error changed: %#v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "logs", runLogFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content := string(data); !strings.Contains(content, `"detail":"cannot read Sample version: metadata command exited with code 23"`) {
+		t.Fatalf("provider cause is missing from operation detail: %s", content)
+	}
+}
+
 func TestEngineRegistersApplicationSecretsBeforeOperationCommandOutput(t *testing.T) {
 	directory := t.TempDir()
 	installed := filepath.Join(directory, "installed")

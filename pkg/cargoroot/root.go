@@ -110,7 +110,7 @@ func parseInstallRoot(raw string) (string, bool, error) {
 		index := strings.IndexByte(line, '=')
 		if index < 0 {
 			if section == "install" && strings.HasPrefix(line, "root") || strings.HasPrefix(line, "install.root") {
-				return "", false, errors.New("Cargo install.root is invalid")
+				return "", false, errors.New("cargo install.root is invalid")
 			}
 			continue
 		}
@@ -120,11 +120,11 @@ func parseInstallRoot(raw string) (string, bool, error) {
 			continue
 		}
 		if found {
-			return "", false, errors.New("Cargo install.root is duplicated")
+			return "", false, errors.New("cargo install.root is duplicated")
 		}
 		value, err := parseString(strings.TrimSpace(line[index+1:]))
 		if err != nil || strings.TrimSpace(value) == "" {
-			return "", false, errors.New("Cargo install.root is invalid")
+			return "", false, errors.New("cargo install.root is invalid")
 		}
 		root, found = value, true
 	}

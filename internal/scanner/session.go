@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eoctet/tendkit/internal/model"
@@ -16,7 +17,7 @@ import (
 // add applies stable catalog identity and exclusion policy before recording a
 // discovery in the session snapshot.
 func (session *scanSession) add(found discovery) {
-	if existingID := session.index.match(found.App); existingID != "" {
+	if existingID := session.index.match(found.App); existingID != "" && !found.StableID {
 		found.App.ID = existingID
 		configured := session.index.apps[existingID]
 		if configured.ID != "" && configured.Type != found.App.Type {
@@ -24,6 +25,18 @@ func (session *scanSession) add(found discovery) {
 		}
 		if configured.ID != "" && (!configured.ScanManaged || session.exclusions.excluded(configured) || session.exclusions.excluded(found.App)) {
 			return
+		}
+	}
+	if found.StableID {
+		configured := session.index.apps[found.App.ID]
+		if configured.ID != "" && (!configured.ScanManaged || session.exclusions.excluded(configured) || session.exclusions.excluded(found.App)) {
+			return
+		}
+		if legacyID := session.index.match(found.App); legacyID != "" && legacyID != found.App.ID {
+			legacy := session.index.apps[legacyID]
+			if !legacy.ScanManaged || session.exclusions.excluded(legacy) {
+				return
+			}
 		}
 	}
 	if session.exclusions.excluded(found.App) {
@@ -63,16 +76,73 @@ func (session *scanSession) discoverPath(ctx context.Context) error {
 		return nil
 	}
 	session.scanner.report(model.ScanStagePath, "")
-	result := handler.NewPath(session.scanner.Runner, builtin.PathDefinitions()).Scan(ctx, handler.Request{Report: func(progress handler.Progress) { session.scanner.report(progress.Stage, progress.Subject) }})
+	result := handler.NewPath(session.scanner.Runner, builtin.PathDefinitions()).Scan(ctx, handler.Request{
+		Report:     func(progress handler.Progress) { session.scanner.report(progress.Stage, progress.Subject) },
+		Diagnostic: func(diagnostic handler.Diagnostic) { session.scanner.reportDiagnostic(Diagnostic(diagnostic)) },
+	})
+	grouped := make(map[string][]handler.Candidate)
 	for _, candidate := range result.Candidates {
+		grouped[candidate.Application.ID] = append(grouped[candidate.Application.ID], candidate)
+	}
+	assigned := make([]handler.Candidate, 0, len(result.Candidates))
+	for _, definition := range builtin.PathDefinitions() {
+		candidates := grouped[handler.PathApplicationID(definition.ID)]
+		if len(candidates) == 0 {
+			continue
+		}
+		assignment, err := assignPathInstances(definition.ID, candidates, session.catalog.Apps)
+		if err != nil {
+			return err
+		}
+		session.applyPathInstanceMigrations(assignment)
+		assigned = append(assigned, assignment.Candidates...)
+	}
+	session.index = indexApps(session.catalog.Apps)
+	for _, candidate := range assigned {
 		resolved, err := session.scanner.resolveGitHub(ctx, candidate.Application)
 		if err != nil {
 			return err
 		}
 		candidate.Application = resolved
-		session.add(session.scanner.pathDiscovery(candidate))
+		found := session.scanner.pathDiscovery(candidate)
+		found.StableID = true
+		session.add(found)
 	}
 	return result.Err
+}
+
+func (session *scanSession) applyPathInstanceMigrations(assignment pathInstanceAssignment) {
+	if len(assignment.Migrations) == 0 && len(assignment.IdentityMigrations) == 0 {
+		return
+	}
+	for index := range session.catalog.Apps {
+		oldID := session.catalog.Apps[index].ID
+		_, identityMigrated := assignment.IdentityMigrations[oldID]
+		if identity, ok := assignment.IdentityMigrations[oldID]; ok {
+			session.catalog.Apps[index].Identity = identity
+		}
+		newID, ok := assignment.Migrations[oldID]
+		if !ok {
+			continue
+		}
+		session.catalog.Apps[index].ID = newID
+		if observation, exists := session.state.Observations[oldID]; exists {
+			delete(session.state.Observations, oldID)
+			session.state.Observations[newID] = observation
+		}
+		if keep, exists := session.catalog.ScanVersionControl[oldID]; exists {
+			delete(session.catalog.ScanVersionControl, oldID)
+			session.catalog.ScanVersionControl[newID] = keep
+		}
+		if !identityMigrated && !installedPath(session.catalog.Apps[index].InstallPath) {
+			if session.observed == nil {
+				session.observed = map[string]model.ManagedStatus{}
+			}
+			missing := session.catalog.Apps[index].StatusManaged
+			missing.UpdateStatus = model.StatusMissing
+			session.observed[newID] = missing
+		}
+	}
 }
 
 func (session *scanSession) discoverApplications(ctx context.Context) error {
@@ -139,6 +209,15 @@ func (session *scanSession) discoverPackages(ctx context.Context) error {
 			session.add(found)
 		}
 	}
+	ecosystems := make([]string, 0, len(packageScan.Errors))
+	for ecosystem := range packageScan.Errors {
+		ecosystems = append(ecosystems, ecosystem)
+	}
+	sort.Strings(ecosystems)
+	for _, ecosystem := range ecosystems {
+		scanErr := packageScan.Errors[ecosystem]
+		session.scanner.reportDiagnostic(Diagnostic{Event: "package_incomplete", Subject: ecosystem, Detail: scanErr.Error(), Err: scanErr})
+	}
 	session.packages = packageScan
 	return nil
 }
@@ -191,6 +270,9 @@ func (session *scanSession) retainIncompleteManagedPackage(application model.App
 		return false
 	}
 	ecosystem := managedPackageEcosystem(application)
+	if ecosystem == "" {
+		return false
+	}
 	if session.packages.Complete[ecosystem] {
 		return false
 	}

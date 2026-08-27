@@ -700,7 +700,7 @@ func sameStableIdentity(left, right model.Application) bool {
 }
 
 func sameManagedProduct(left, right model.Application) bool {
-	if strings.ToLower(strings.TrimSpace(left.Name)) != strings.ToLower(strings.TrimSpace(right.Name)) {
+	if !strings.EqualFold(strings.TrimSpace(left.Name), strings.TrimSpace(right.Name)) {
 		return false
 	}
 	leftCanonical := left.Type == model.ApplicationTypeCLI || left.Type == model.ApplicationTypeBundle

@@ -176,7 +176,7 @@ func (l *Logger) Operation(level, operation, subject, message string) ([]string,
 	if err != nil || lines == nil {
 		return lines, err
 	}
-	err = l.writeLocked(LogEntry{Level: normalized, Event: "operation_log", Operation: operation, AppName: subject, Message: message})
+	err = l.writeLocked(LogEntry{Level: normalized, Event: "app_operation", Operation: operation, AppName: subject, Message: message})
 	return lines, err
 }
 
@@ -233,7 +233,7 @@ func (l *Logger) OperationOutputWriter(level, operation, appID, appName string) 
 	}
 	entry := LogEntry{
 		Time: time.Now().UTC().Format(time.RFC3339Nano), RunID: l.runID, Level: normalized,
-		Event: "operation_log", Operation: operation, AppID: RedactSensitiveValues(appID, l.sensitive), AppName: appName,
+		Event: "app_operation", Operation: operation, AppID: RedactSensitiveValues(appID, l.sensitive), AppName: appName,
 	}
 	sensitive := make([]string, 0, len(l.sensitive))
 	for value := range l.sensitive {

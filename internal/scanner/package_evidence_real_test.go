@@ -54,18 +54,27 @@ func TestPackageEvidenceRealScanner(t *testing.T) {
 		}
 	}
 	if nodeIncomplete {
-		expected := []struct{ id, binary, packageName, updateAction string }{
-			{id: "cli-codex", binary: "codex", packageName: "@openai/codex", updateAction: "codex update"},
-			{id: "cli-claude", binary: "claude", packageName: "@anthropic-ai/claude-code", updateAction: "claude update"},
-			{id: "cli-gemini", binary: "gemini", packageName: "@google/gemini-cli"},
+		expected := []struct{ binary, packageName, updateSuffix string }{
+			{binary: "codex", packageName: "@openai/codex", updateSuffix: "codex update"},
+			{binary: "claude", packageName: "@anthropic-ai/claude-code", updateSuffix: "claude update"},
+			{binary: "gemini", packageName: "@google/gemini-cli"},
 		}
 		for _, item := range expected {
 			if _, err := exec.LookPath(item.binary); err != nil {
 				continue
 			}
-			app := applicationByID(t, updated.Apps, item.id)
-			if app.Type != model.ApplicationTypeCLI || app.Provider.Type != model.ProviderNPM || app.Package != item.packageName || app.Identity != model.PackageIdentity("node", item.packageName) || app.Provider.UpdateAction() != item.updateAction {
-				t.Fatalf("incomplete Node inventory migrated PATH canonical %s: %#v", item.id, app)
+			matched := 0
+			for _, app := range updated.Apps {
+				if app.Type != model.ApplicationTypeCLI || app.Package != item.packageName {
+					continue
+				}
+				matched++
+				if app.Provider.Type != model.ProviderNPM || !strings.HasPrefix(app.Identity, "cli:"+model.NormalizeIdentityName(app.Name)) || (item.updateSuffix != "" && !strings.HasSuffix(app.Provider.UpdateAction(), item.updateSuffix)) {
+					t.Fatalf("incomplete Node inventory migrated PATH canonical %s: %#v", item.binary, app)
+				}
+			}
+			if matched == 0 {
+				t.Fatalf("incomplete Node inventory lost PATH canonical %s", item.binary)
 			}
 		}
 	}

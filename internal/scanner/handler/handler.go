@@ -25,9 +25,14 @@ const (
 )
 
 type Progress struct{ Stage, Subject string }
+type Diagnostic struct {
+	Event, Subject, Detail string
+	Err                    error
+}
 type Request struct {
 	Configured []model.Application
 	Report     func(Progress)
+	Diagnostic func(Diagnostic)
 }
 type Candidate struct {
 	Application    model.Application

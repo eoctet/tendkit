@@ -12,6 +12,13 @@ import (
 // Progress is retained as the scanner facade spelling for the stable model event.
 type Progress = model.ScanProgress
 
+// Diagnostic reports a non-fatal scanner condition to its orchestration layer.
+// Scanner remains independent of logging and persistence.
+type Diagnostic struct {
+	Event, Subject, Detail string
+	Err                    error
+}
+
 // GitHubResolver is the Scanner-facing capability for classifying a GitHub project.
 // Its implementation remains private to the handler package.
 type GitHubResolver interface {
@@ -27,6 +34,7 @@ func NewGitHubResolver(releaseEndpoint, tagEndpoint string, source *httpx.HTTPSo
 type Scanner struct {
 	Runner      runtimeutil.Runner
 	Progress    func(Progress)
+	Diagnostic  func(Diagnostic)
 	DownloadDir string
 	GitHub      GitHubResolver
 	bundleIDs   []string
@@ -43,6 +51,7 @@ type discovery struct {
 	App      model.Application
 	State    model.ManagedStatus
 	Evidence *handler.InstallationEvidence
+	StableID bool
 }
 
 // scanSession aggregates the catalog, runtime state, discoveries, and
@@ -111,6 +120,12 @@ func (s Scanner) prepareScan(ctx context.Context, catalog model.Config, state mo
 func (s Scanner) report(stage, subject string) {
 	if s.Progress != nil {
 		s.Progress(Progress{Stage: stage, Subject: subject})
+	}
+}
+
+func (s Scanner) reportDiagnostic(diagnostic Diagnostic) {
+	if s.Diagnostic != nil {
+		s.Diagnostic(diagnostic)
 	}
 }
 

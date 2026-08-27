@@ -53,6 +53,11 @@ func (i existingIndex) match(app model.Application) string {
 	}
 	id := i.byName[strings.ToLower(strings.TrimSpace(app.Name))]
 	configured := i.apps[id]
+	if _, installationScoped := matchingBuiltInPathDefinition(app); installationScoped && app.InstallPath != "" {
+		if _, configuredScoped := matchingBuiltInPathDefinition(configured); configuredScoped || strings.HasPrefix(strings.ToLower(strings.TrimSpace(configured.Identity)), "cli:") {
+			return ""
+		}
+	}
 	sameType := configured.Type == app.Type
 	if sameType && app.Type == model.ApplicationTypePackage && configured.Provider.Type != app.Provider.Type {
 		sameType = false

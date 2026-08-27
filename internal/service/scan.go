@@ -53,7 +53,7 @@ func (s *Service) PreviewScan(ctx context.Context, observer ScanObserver) (ScanP
 		baseCatalog.Apps = cloneApplications(current)
 		currentIDs := appIDs(current)
 		runner := runtimeutil.Runner{IdleTimeout: time.Duration(catalog.Settings.TimeoutSeconds) * time.Second}
-		candidate, candidateState, err := (scanner.Scanner{Runner: runner, Progress: observer.Progress, GitHub: s.githubResolver(catalog)}).Scan(ctx, catalog, state)
+		candidate, candidateState, err := (scanner.Scanner{Runner: runner, Progress: observer.Progress, Diagnostic: scanDiagnosticLogger(log), GitHub: s.githubResolver(catalog)}).Scan(ctx, catalog, state)
 		if err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
 				_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), "", time.Since(started), 0))
@@ -106,6 +106,7 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 		applicationScanner := scanner.New(catalog.Settings.Scan)
 		applicationScanner.Runner = runtimeutil.Runner{IdleTimeout: time.Duration(catalog.Settings.TimeoutSeconds) * time.Second}
 		applicationScanner.Progress = observer.Progress
+		applicationScanner.Diagnostic = scanDiagnosticLogger(log)
 		applicationScanner.GitHub = s.githubResolver(catalog)
 		applicationScanner.DownloadDir = catalog.Settings.Downloader.StorePath
 		candidate, candidateState, err := applicationScanner.ScanApplication(ctx, target, candidateState)
@@ -153,6 +154,21 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 
 func scanLogEntry(event, status, message, detail, subject string, duration time.Duration, count int) logutil.LogEntry {
 	return logutil.LogEntry{Event: event, Operation: "scan", Status: status, AppID: subject, Message: message, Detail: detail, DurationMS: duration.Milliseconds(), ResultCount: count}
+}
+
+func scanDiagnosticLogger(log *logutil.Logger) func(scanner.Diagnostic) {
+	return func(diagnostic scanner.Diagnostic) {
+		detail := diagnostic.Detail
+		if detail == "" && diagnostic.Err != nil {
+			detail = diagnostic.Err.Error()
+		}
+		switch diagnostic.Event {
+		case "package_incomplete":
+			_ = log.Warn(scanLogEntry("scan_package_incomplete", model.StatusFailed, "package scan incomplete", detail, diagnostic.Subject, 0, 0))
+		case "path_action_binding_skipped":
+			_ = log.Warn(scanLogEntry("scan_path_action_binding_skipped", model.StatusSkipped, "path action binding skipped", detail, diagnostic.Subject, 0, 0))
+		}
+	}
 }
 
 func (s *Service) githubResolver(catalog model.Config) scanner.GitHubResolver {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -114,13 +116,88 @@ func TestPythonHandlerManagerFallbackAndMissing(t *testing.T) {
 		}
 		return nil, ErrNotFound
 	}
-	result := handler.Scan(context.Background(), Request{Configured: []model.Application{{Name: "Python 3", InstallPath: "/fixture/python3"}}})
+	result := handler.Scan(context.Background(), Request{Configured: []model.Application{{ID: "cli-python3", Name: "Renamed", Type: model.ApplicationTypeCLI, InstallPath: "/fixture/python3"}}})
 	if !result.Complete || result.Err != nil || len(runner.calls) != 1 || !strings.Contains(runner.calls[0], "/fixture/python3") {
 		t.Fatalf("configured fallback result=%#v calls=%v", result, runner.calls)
 	}
 	missing := newPython(runner, "").Scan(context.Background(), Request{})
 	if missing.Complete || missing.Err == nil || !strings.Contains(missing.Err.Error(), "python3 not found") {
 		t.Fatalf("missing manager result=%#v", missing)
+	}
+}
+
+func TestPythonHandlerManagerUsesConfiguredEquivalentVisiblePath(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "Framework", "bin", "python3")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "local", "bin", "python3")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(root, "other", "python3")
+	if err := os.MkdirAll(filepath.Dir(other), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(other, []byte("fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name       string
+		configured []model.Application
+		want       string
+	}{
+		{
+			name: "renamed base ID",
+			configured: []model.Application{{
+				ID: "cli-python3", Name: "Custom Python", Type: model.ApplicationTypeCLI, InstallPath: target,
+			}},
+			want: target,
+		},
+		{
+			name: "renamed extended ID",
+			configured: []model.Application{{
+				ID: "cli-python3-31f2aee4e71d21fb", Name: "Custom Python", Type: model.ApplicationTypeCLI, InstallPath: target,
+			}},
+			want: target,
+		},
+		{
+			name: "invalid extended ID is ignored",
+			configured: []model.Application{{
+				ID: "cli-python3-fingerprint", Name: "Python 3", Type: model.ApplicationTypeCLI, InstallPath: target,
+			}},
+			want: link,
+		},
+		{
+			name: "name-only alias is ignored",
+			configured: []model.Application{{
+				ID: "custom-python", Name: "Python 3", Type: model.ApplicationTypeCLI, InstallPath: target,
+			}},
+			want: link,
+		},
+		{
+			name: "non-equivalent Python installation is ignored",
+			configured: []model.Application{{
+				ID: "cli-python3", Name: "Custom Python", Type: model.ApplicationTypeCLI, InstallPath: other,
+			}},
+			want: link,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := NewPython(nil)
+			handler.lookPath = func(string) (string, error) { return link, nil }
+			if got := handler.findManager(test.configured); got != test.want {
+				t.Fatalf("manager = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

@@ -102,11 +102,6 @@ func (p CargoProvider) error(request Request, capability Capability, key string,
 
 var cargoInstalledLine = regexp.MustCompile(`(?m)^([^\s]+)\s+v([^\s:]+):\s*$`)
 
-func parseCargoInstalled(raw, name string) (string, error) {
-	version, _, err := parseCargoInstalledBinaries(raw, name)
-	return version, err
-}
-
 func parseCargoInstalledBinaries(raw, name string) (string, []string, error) {
 	var found string
 	var binaries []string

@@ -403,8 +403,16 @@ func (e *engine) fail(app model.Application, result model.Result, operation stri
 	result.Status, result.Message = model.StatusFailed, cleaned
 	result.State.UpdateStatus = result.Status
 	result.State.Error = cleaned
-	_ = e.logger.Error(operationLogEntry(app, operation, model.StatusFailed, "application operation failed", cleaned, duration, ""))
+	_ = e.logger.Error(operationLogEntry(app, operation, model.StatusFailed, "application operation failed", providerFailureDetail(err, app.Environment, cleaned), duration, ""))
 	return result
+}
+
+func providerFailureDetail(err error, environment map[string]string, fallback string) string {
+	var providerError *providerpkg.Error
+	if !errors.As(err, &providerError) || providerError.Cause == nil {
+		return fallback
+	}
+	return redact(err.Error()+": "+providerError.Cause.Error(), environment)
 }
 
 func operationLogEntry(app model.Application, operation, status, summary, detail string, duration time.Duration, artifact string) logutil.LogEntry {

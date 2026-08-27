@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eoctet/tendkit/internal/model"
@@ -124,10 +126,30 @@ func (h *PythonHandler) Scan(ctx context.Context, request Request) Result {
 
 func (h *PythonHandler) findManager(configured []model.Application) string {
 	if path, err := h.lookPath("python3"); err == nil {
+		if canonical, err := CanonicalExecutablePath(path); err == nil {
+			matches := make([]string, 0)
+			for _, app := range configured {
+				if !pythonManagerApplication(app) {
+					continue
+				}
+				configuredPath := expandConfiguredPath(app.InstallPath, h.homeDir)
+				visible, err := filepath.Abs(configuredPath)
+				if err != nil {
+					continue
+				}
+				if configuredCanonical, err := CanonicalExecutablePath(visible); err == nil && configuredCanonical == canonical {
+					matches = append(matches, filepath.Clean(visible))
+				}
+			}
+			if len(matches) > 0 {
+				sort.Strings(matches)
+				return matches[0]
+			}
+		}
 		return path
 	}
 	for _, app := range configured {
-		if !strings.EqualFold(app.ID, "python3") && !strings.EqualFold(app.Name, "Python 3") {
+		if !pythonManagerApplication(app) {
 			continue
 		}
 		path := expandConfiguredPath(app.InstallPath, h.homeDir)
@@ -136,6 +158,14 @@ func (h *PythonHandler) findManager(configured []model.Application) string {
 		}
 	}
 	return ""
+}
+
+func pythonManagerApplication(app model.Application) bool {
+	if app.Type != model.ApplicationTypeCLI {
+		return false
+	}
+	id := strings.TrimSpace(app.ID)
+	return id == PathApplicationID("python3") || isExtendedPathApplicationIDValue("python3", id)
 }
 
 func pipVersionCommand(python, name string) string {

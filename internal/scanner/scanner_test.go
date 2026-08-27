@@ -574,11 +574,8 @@ func TestDeduplicateCatalogPrefersBuiltInCLIAndMergesPackageCapabilities(t *test
 	}
 
 	apps, _ := deduplicateCatalog([]model.Application{packageApp, cli}, model.RuntimeState{})
-	if len(apps) != 1 || apps[0].ID != cli.ID || apps[0].Type != model.ApplicationTypeCLI {
-		t.Fatalf("built-in CLI was not canonical: %#v", apps)
-	}
-	if apps[0].Provider.VersionAction() != cli.Provider.VersionAction() || apps[0].Provider.UpdateAction() != packageApp.Provider.UpdateAction() || apps[0].UpdateMode != model.ModeAuto {
-		t.Fatalf("package capabilities were not safely merged: %#v", apps[0])
+	if len(apps) != 2 {
+		t.Fatalf("different installation paths were merged without evidence: %#v", apps)
 	}
 }
 
@@ -610,8 +607,13 @@ func TestDeduplicateCatalogKeepsBuiltInUpdateCommand(t *testing.T) {
 	}
 
 	apps, _ := deduplicateCatalog([]model.Application{packageApp, cli}, model.RuntimeState{})
-	if len(apps) != 1 || apps[0].Provider.UpdateAction() != cli.Provider.UpdateAction() {
-		t.Fatalf("built-in update command was overwritten: %#v", apps)
+	if len(apps) != 2 {
+		t.Fatalf("different installation paths were merged without evidence: %#v", apps)
+	}
+	for _, app := range apps {
+		if app.ID == cli.ID && app.Provider.UpdateAction() != cli.Provider.UpdateAction() {
+			t.Fatalf("built-in update command was overwritten: %#v", apps)
+		}
 	}
 }
 
@@ -705,11 +707,11 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstTarget := applicationByIdentity(first.Apps, "package:node:anthropic-ai-claude-code")
+	firstTarget := applicationByID(t, first.Apps, "cli-claude")
 	if firstTarget.Description == "" || firstTarget.URL == "" {
 		t.Fatalf("first full scan lost duplicate metadata: %#v", firstTarget)
 	}
-	if firstTarget.Type != model.ApplicationTypeCLI || firstTarget.Provider.VersionAction() != "claude --version" {
+	if firstTarget.Type != model.ApplicationTypeCLI || firstTarget.Provider.VersionAction() != filepath.Join(directory, "claude")+" --version" {
 		t.Fatalf("first full scan did not keep the built-in CLI canonical: %#v", firstTarget)
 	}
 
@@ -717,7 +719,7 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondTarget := applicationByIdentity(second.Apps, firstTarget.Identity)
+	secondTarget := applicationByID(t, second.Apps, firstTarget.ID)
 	if secondTarget.Description != firstTarget.Description || secondTarget.URL != firstTarget.URL {
 		t.Fatalf("second full scan introduced metadata differences: first=%#v second=%#v", firstTarget, secondTarget)
 	}
@@ -760,12 +762,16 @@ esac
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := applicationByIdentity(result.Apps, "package:node:google-gemini-cli")
+	target := applicationByID(t, result.Apps, "cli-gemini")
 	if target.ID != "cli-gemini" || target.Type != model.ApplicationTypeCLI || target.InstallPath != filepath.Join(directory, "gemini") {
 		t.Fatalf("full scan did not choose built-in CLI: %#v", target)
 	}
-	if target.Provider.VersionAction() != "gemini --version" || target.Provider.UpdateAction() == "" || target.UpdateMode != model.ModeAuto {
-		t.Fatalf("full scan did not enrich package capabilities: %#v", target)
+	if target.Provider.VersionAction() != filepath.Join(directory, "gemini")+" --version" || target.Provider.UpdateAction() != "" || target.UpdateMode != model.ModeCheck {
+		t.Fatalf("PATH candidate did not remain independently scoped: %#v", target)
+	}
+	packageTarget := applicationByIdentity(result.Apps, "package:node:google-gemini-cli")
+	if packageTarget.ID == "" || packageTarget.Provider.UpdateAction() == "" {
+		t.Fatalf("package candidate was not preserved independently: %#v", result.Apps)
 	}
 }
 

@@ -123,7 +123,7 @@ func TestLoggerOperationUsesSameFilterAndWritesJSONL(t *testing.T) {
 		t.Fatalf("operation = %q, %v", lines, err)
 	}
 	data, err := os.ReadFile(filepath.Join(directory, runLogFile))
-	if err != nil || !strings.Contains(string(data), `"event":"operation_log"`) {
+	if err != nil || !strings.Contains(string(data), `"event":"app_operation"`) {
 		t.Fatalf("operation JSONL = %q, %v", data, err)
 	}
 }
@@ -379,7 +379,7 @@ func TestOperationOutputWriterPersistsOneCompleteCommandRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "one\n" + large + "\ntwo\n"
-	if entry.Event != "operation_log" || entry.AppID != "sample" || entry.AppName != "Sample" || entry.Message != want {
+	if entry.Event != "app_operation" || entry.AppID != "sample" || entry.AppName != "Sample" || entry.Message != want {
 		t.Fatalf("entry = %#v", entry)
 	}
 	if matches, err := filepath.Glob(filepath.Join(directory, ".run-command-*")); err != nil || len(matches) != 0 {

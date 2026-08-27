@@ -414,6 +414,72 @@ func TestPreviewScanPersistsExistingStateWithoutPersistingCandidates(t *testing.
 	}
 }
 
+func TestPreviewScanLogsIncompletePackageEcosystemWithoutExistingApplication(t *testing.T) {
+	directory := t.TempDir()
+	binDirectory := filepath.Join(directory, "bin")
+	if err := os.Mkdir(binDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	goBinary := filepath.Join(binDirectory, "go")
+	if err := os.WriteFile(goBinary, []byte("#!/bin/sh\nif [ \"$1\" = env ]; then exit 7; fi\necho 'go version go1.25.0 darwin/arm64'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDirectory)
+	store := testStore(directory)
+	catalog := scanTestCatalog()
+	catalog.Settings.Scan.Packages.Go = true
+	catalog.Settings.LogDir = filepath.Join(directory, "logs")
+	saveTestConfig(t, store, catalog)
+
+	if _, err := (&Service{config: store, GitHubResolver: noGitHubResolver{}}).PreviewScan(context.Background(), ScanObserver{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "logs", "run.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"event":"scan_package_incomplete"`) ||
+		!strings.Contains(content, `"app_id":"go"`) ||
+		!strings.Contains(content, `go env exited with code 7`) {
+		t.Fatalf("package diagnostic log is missing: %s", content)
+	}
+}
+
+func TestPreviewScanLogsSkippedPathActionBinding(t *testing.T) {
+	directory := t.TempDir()
+	firstDirectory := filepath.Join(directory, "first")
+	secondDirectory := filepath.Join(directory, "second")
+	for _, binDirectory := range []string{firstDirectory, secondDirectory} {
+		if err := os.Mkdir(binDirectory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(binDirectory, "pip3"), []byte("#!/bin/sh\necho 'pip 25.0 from fixture'\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", strings.Join([]string{firstDirectory, secondDirectory}, string(os.PathListSeparator)))
+	store := testStore(directory)
+	catalog := scanTestCatalog()
+	catalog.Settings.LogDir = filepath.Join(directory, "logs")
+	saveTestConfig(t, store, catalog)
+
+	if _, err := (&Service{config: store, GitHubResolver: noGitHubResolver{}}).PreviewScan(context.Background(), ScanObserver{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(directory, "logs", "run.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"event":"scan_path_action_binding_skipped"`) ||
+		!strings.Contains(content, `"app_id":"pip3"`) ||
+		!strings.Contains(content, `action=update`) ||
+		!strings.Contains(content, `command does not start with executable`) {
+		t.Fatalf("Path action diagnostic log is missing: %s", content)
+	}
+}
+
 func TestPreviewScanLogsPersistenceFailure(t *testing.T) {
 	directory := t.TempDir()
 	binDirectory := filepath.Join(directory, "bin")

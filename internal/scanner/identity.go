@@ -70,6 +70,9 @@ func ExcludedConfiguredApps(catalog model.Config) []model.Application {
 // target; strict ownership evidence uses canonicalEvidencePath instead.
 func canonicalPath(value string) string {
 	value = installedPathValue(value)
+	if canonical, err := handler.CanonicalExecutablePath(value); err == nil {
+		return canonical
+	}
 	if absolute, err := filepath.Abs(value); err == nil {
 		value = absolute
 	}
@@ -90,11 +93,13 @@ func normalizePackage(value string) string {
 type builtInPathDefinitionIndex struct {
 	byID      map[string]builtin.PathDefinition
 	byPackage map[string]builtin.PathDefinition
+	all       []builtin.PathDefinition
 }
 
 var canonicalBuiltInPathDefinitions = func() builtInPathDefinitionIndex {
 	index := builtInPathDefinitionIndex{byID: make(map[string]builtin.PathDefinition), byPackage: make(map[string]builtin.PathDefinition)}
 	for _, item := range builtin.PathDefinitions() {
+		index.all = append(index.all, item)
 		index.byID[strings.ToLower(item.ID)] = item
 		if key := builtInPackageKey(item.Provider, item.Package); key != "" {
 			index.byPackage[key] = item
@@ -153,6 +158,11 @@ func matchingBuiltInPathDefinition(app model.Application) (builtin.PathDefinitio
 		if item, ok := canonicalBuiltInPathDefinitions.byID[strings.ToLower(app.ID)]; ok {
 			return item, true
 		}
+		for _, item := range canonicalBuiltInPathDefinitions.all {
+			if pathInstanceExtendedID(item.ID, strings.ToLower(app.ID)) {
+				return item, true
+			}
+		}
 	}
 	if item, ok := canonicalBuiltInPathDefinitions.byPackage[builtInPackageKey(app.Provider.Type, app.Package)]; ok {
 		return item, true
@@ -162,7 +172,7 @@ func matchingBuiltInPathDefinition(app model.Application) (builtin.PathDefinitio
 
 func deduplicationKey(app model.Application, activeBuiltInCLIs map[string]bool) string {
 	if item, ok := matchingBuiltInPathDefinition(app); ok && activeBuiltInCLIs[item.ID] {
-		return "builtin-path:" + item.ID
+		return "builtin-path:" + item.ID + ":" + canonicalPath(app.InstallPath)
 	}
 	key := inferIdentity(app)
 	if app.InstallPath != "" && !strings.HasPrefix(key, "package:") {

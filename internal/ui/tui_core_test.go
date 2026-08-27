@@ -2353,6 +2353,36 @@ func TestTUICtrlSOnlyOpensScanPage(t *testing.T) {
 	}
 }
 
+func TestTUIScanDuplicateNamesKeepStableIDOrderDuringNavigation(t *testing.T) {
+	view := sampleTUIView()
+	view.page = tuiScan
+	view.catalog.Apps = nil
+	view.scanProposed = map[string]model.Application{}
+	view.scanIgnored = map[string]bool{}
+	want := make([]string, 32)
+	for index := len(want) - 1; index >= 0; index-- {
+		id := fmt.Sprintf("cli-tool-%02d", index)
+		want[index] = id
+		view.scanProposed[id] = model.Application{ID: id, Name: "Same Tool", Type: model.ApplicationTypeCLI}
+	}
+
+	for step := 0; step < 64; step++ {
+		apps := scanDisplayApps(&view)
+		got := make([]string, len(apps))
+		for index, app := range apps {
+			got[index] = app.ID
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("duplicate-name order changed at step %d: got=%v want=%v", step, got, want)
+		}
+		key := "down"
+		if step%2 == 1 {
+			key = "up"
+		}
+		handleScanListKey(context.Background(), &view, key, TUIActions{}, make(chan tuiEvent, 1))
+	}
+}
+
 func TestTUIScanCompletionLogsDetailedStatistics(t *testing.T) {
 	useLanguage(t, i18n.Chinese)
 	view := sampleTUIView()
