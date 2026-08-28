@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/eoctet/tendkit/pkg/version"
@@ -89,36 +88,4 @@ func normalizeAny(value any) (string, error) {
 		return "", NewError("provider.empty_value")
 	}
 	return version.Normalize(fmt.Sprint(value)), nil
-}
-
-func findVersion(value any) (string, error) {
-	keys := []string{"version", "latest", "tag_name", "name", "productVersion"}
-	if object, ok := value.(map[string]any); ok {
-		for _, key := range keys {
-			if found, exists := object[key]; exists {
-				if normalized, err := normalizeAny(found); err == nil {
-					return normalized, nil
-				}
-			}
-		}
-		objectKeys := make([]string, 0, len(object))
-		for key := range object {
-			objectKeys = append(objectKeys, key)
-		}
-		sort.Strings(objectKeys)
-		for _, key := range objectKeys {
-			child := object[key]
-			if found, err := findVersion(child); err == nil {
-				return found, nil
-			}
-		}
-	}
-	if list, ok := value.([]any); ok {
-		for _, child := range list {
-			if found, err := findVersion(child); err == nil {
-				return found, nil
-			}
-		}
-	}
-	return "", NewError("provider.json_version_missing")
 }

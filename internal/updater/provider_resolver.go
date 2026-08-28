@@ -53,14 +53,6 @@ func newProviderResolver(commandRunner runtimeutil.Runner, endpoints map[string]
 	return &providerResolver{registry: registry, source: source, runner: commandRunner}, nil
 }
 
-// newProviderResolverWithRegistry constructs a resolver around an injected registry.
-func newProviderResolverWithRegistry(registry *providerpkg.Registry) *providerResolver {
-	if registry == nil {
-		registry = providerpkg.NewRegistry()
-	}
-	return &providerResolver{registry: registry}
-}
-
 // httpSource returns the shared provider HTTP source.
 func (c *providerResolver) httpSource() *providerpkg.HTTPSource {
 	if c == nil {
