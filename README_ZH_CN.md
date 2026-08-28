@@ -61,7 +61,7 @@ TendKit 继续使用现有包管理器和更新方式。它提供统一的查看
 
 暂不支持 Windows。下载默认支持 `curl` 或 `aria2c`（需自行安装）。
 
-Go 用户也可以直接安装组件库：
+Go 用户也可以直接安装命令行程序：
 
 ```bash
 go install github.com/eoctet/tendkit/cmd/tendkit@VERSION

@@ -12,7 +12,7 @@ TendKit is pre-release software. Security fixes are made for the latest tagged r
 | `main` | Yes |
 | Older releases or branches | No |
 
-Until a tagged release exists, `main` is the only supported version. This policy may change when the project adopts a stable release cadence.
+This policy may change when the project adopts a stable release cadence.
 
 ## Reporting a vulnerability
 

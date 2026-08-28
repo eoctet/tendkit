@@ -48,7 +48,7 @@ scripts/verify-go-quality.sh
 | Primary language | Go |
 | Minimum version | Go 1.23 |
 | Module | `github.com/eoctet/tendkit` |
-| Dependency policy | Prefer the Go standard library; the project currently has no third-party Go modules |
+| Dependency policy | Prefer the Go standard library |
 | Build entry point | `./cmd/tendkit` |
 | Distribution | A single binary built without cgo |
 | Platforms | macOS, Ubuntu, Debian, CentOS, Red Hat Enterprise Linux |

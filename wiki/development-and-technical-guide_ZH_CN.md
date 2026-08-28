@@ -48,7 +48,7 @@ scripts/verify-go-quality.sh
 | 主语言 | Go |
 | 最低版本 | Go 1.23 |
 | 模块 | `github.com/eoctet/tendkit` |
-| 依赖策略 | Go 标准库优先；当前不使用第三方 Go module |
+| 依赖策略 | Go 标准库优先 |
 | 构建入口 | `./cmd/tendkit` |
 | 分发方式 | 无 cgo 的单二进制 |
 | 平台 | macOS、Ubuntu、Debian、CentOS、Red Hat Enterprise Linux |
