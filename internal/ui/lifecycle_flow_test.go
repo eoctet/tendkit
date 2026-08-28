@@ -15,7 +15,6 @@ import (
 	"syscall"
 
 	"context"
-	"unsafe"
 
 	"testing"
 
@@ -403,15 +402,6 @@ func tuiPTYActions() (TUIActions, *tuiPTYActionSpy) {
 	}, spy
 }
 
-func termiosForTUIPTY(t *testing.T, file *os.File) syscall.Termios {
-	t.Helper()
-	var state syscall.Termios
-	_, _, errno := syscall.Syscall6(syscall.SYS_IOCTL, file.Fd(), syscall.TIOCGETA, uintptr(unsafe.Pointer(&state)), 0, 0, 0)
-	if errno != 0 {
-		t.Fatalf("TIOCGETA: %v", errno)
-	}
-	return state
-}
 func TestTUITerminalLifecycleFlow(t *testing.T) {
 	t.Run("tui-pty-input-waiter", func(t *testing.T) {
 		master, slave, err := pty.Open()
