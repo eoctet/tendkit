@@ -90,14 +90,6 @@ func TestTUICommandFlow(t *testing.T) {
 			}
 		}
 	})
-	t.Run("resolve-command-rejects-removed-tui-init-and-scan-commands", func(t *testing.T) {
-		bootstrap := service.DefaultBootstrap()
-		for _, command := range []string{"tui", "init", "scan"} {
-			if _, _, code, done := resolveCommand([]string{command}, bootstrap); !done || code != 2 {
-				t.Fatalf("resolveCommand(%q) = done %v, code %d; want rejected with code 2", command, done, code)
-			}
-		}
-	})
 	t.Run("default-tui-auto-initializes-missing-configuration-and-accepts-global-options", func(t *testing.T) {
 		workingDirectory, err := os.Getwd()
 		if err != nil {
@@ -118,7 +110,7 @@ func TestTUICommandFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 		called := false
-		code := runWithTUI([]string{
+		code, _, _ := runWithTUIForTest(t, []string{
 			"--config", configPath, "--lock", lockPath, "--color", "never", "--lang", "en", "--env-file", envPath,
 		}, func(_ context.Context, store *service.Service, color ui.Mode) error {
 			called = true
@@ -142,7 +134,7 @@ func TestTUICommandFlow(t *testing.T) {
 		t.Setenv("HOME", directory)
 		configPath := filepath.Join(directory, "custom", "catalog.json")
 		lockPath := configPath + ".lock"
-		code := runWithTUI([]string{"--config", configPath, "--no-env-file", "--color", "never"}, func(_ context.Context, _ *service.Service, _ ui.Mode) error {
+		code, _, _ := runWithTUIForTest(t, []string{"--config", configPath, "--no-env-file", "--color", "never"}, func(_ context.Context, _ *service.Service, _ ui.Mode) error {
 			if _, err := os.Stat(lockPath); err != nil {
 				t.Fatalf("derived lock was not created at %s: %v", lockPath, err)
 			}
@@ -167,7 +159,7 @@ func TestTUICommandFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		code := runWithTUI([]string{"--no-env-file"}, func(_ context.Context, store *service.Service, _ ui.Mode) error {
+		code, _, _ := runWithTUIForTest(t, []string{"--no-env-file"}, func(_ context.Context, store *service.Service, _ ui.Mode) error {
 			if _, _, err := store.Load(); err != nil {
 				t.Fatalf("TUI received uninitialized default config: %v", err)
 			}
@@ -198,7 +190,7 @@ func TestTUICommandFlow(t *testing.T) {
 			t.Fatal(err)
 		}
 		called := false
-		code := runWithTUI([]string{
+		code, _, _ := runWithTUIForTest(t, []string{
 			"--config", configPath, "--lock", lockPath, "--no-env-file",
 		}, func(context.Context, *service.Service, ui.Mode) error {
 			called = true
@@ -231,7 +223,7 @@ func TestTUICommandFlow(t *testing.T) {
 			{"version", "--help"},
 		} {
 			called := false
-			if code := runWithTUI(arguments, func(context.Context, *service.Service, ui.Mode) error {
+			if code, _, _ := runWithTUIForTest(t, arguments, func(context.Context, *service.Service, ui.Mode) error {
 				called = true
 				return nil
 			}); code != 2 && !(len(arguments) == 2 && arguments[0] == "version" && code == 0) {

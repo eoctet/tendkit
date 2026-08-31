@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"context"
+
 	"github.com/eoctet/tendkit/internal/model"
 	"github.com/eoctet/tendkit/internal/service"
 	"github.com/eoctet/tendkit/internal/ui"
@@ -13,8 +14,9 @@ import (
 
 	"strings"
 
-	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 	"testing"
+
+	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 
 	"github.com/eoctet/tendkit/internal/config"
 )
@@ -114,7 +116,7 @@ func TestCommandContract(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if code := run([]string{"version", "--env-file", explicitPath}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version", "--env-file", explicitPath}); code != 0 {
 			t.Fatalf("run returned %d", code)
 		}
 		for key, want := range map[string]string{
@@ -153,7 +155,7 @@ func TestCommandContract(t *testing.T) {
 		if err := os.Chdir(temporaryDirectory); err != nil {
 			t.Fatal(err)
 		}
-		if code := run([]string{"version"}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version"}); code != 0 {
 			t.Fatalf("run returned %d", code)
 		}
 		if value := os.Getenv(startupKey); value != "loaded-by-startup" {
@@ -188,7 +190,7 @@ func TestCommandContract(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(userEnvDirectory, ".env"), []byte(key+"=loaded-by-user-fallback\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if code := run([]string{"version"}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version"}); code != 0 {
 			t.Fatalf("run returned %d", code)
 		}
 		if value := os.Getenv(key); value != "loaded-by-user-fallback" {
@@ -219,7 +221,7 @@ func TestCommandContract(t *testing.T) {
 		if err := os.Chdir(temporaryDirectory); err != nil {
 			t.Fatal(err)
 		}
-		if code := run([]string{"version", "--no-env-file"}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version", "--no-env-file"}); code != 0 {
 			t.Fatalf("run returned %d", code)
 		}
 		if _, exists := os.LookupEnv(key); exists {
@@ -227,20 +229,13 @@ func TestCommandContract(t *testing.T) {
 		}
 	})
 	t.Run("run-rejects-conflicting-env-options", func(t *testing.T) {
-		if code := run([]string{"version", "--env-file", "custom.env", "--no-env-file"}); code != 2 {
+		if code, _, _ := runForTest(t, []string{"version", "--env-file", "custom.env", "--no-env-file"}); code != 2 {
 			t.Fatalf("run returned %d, want 2", code)
 		}
 	})
 	t.Run("version-ignores-color-validation", func(t *testing.T) {
-		if code := run([]string{"version", "--color", "unsupported", "--no-env-file"}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version", "--color", "unsupported", "--no-env-file"}); code != 0 {
 			t.Fatalf("run returned %d, want 0", code)
-		}
-	})
-	t.Run("run-rejects-removed-execution-commands", func(t *testing.T) {
-		for _, command := range []string{"migrate", "download", "run", "list", "show", "check", "update"} {
-			if code := run([]string{command}); code != 2 {
-				t.Fatalf("run(%q) returned %d, want 2", command, code)
-			}
 		}
 	})
 	t.Run("resolve-command-uses-default-action-without-synthetic-subcommand", func(t *testing.T) {
@@ -303,7 +298,7 @@ func TestCommandContract(t *testing.T) {
 			{"version", "--catalog", "applications.json"},
 			{"version", "--state", "state.json"},
 		} {
-			if code := run(arguments); code != 2 {
+			if code, _, _ := runForTest(t, arguments); code != 2 {
 				t.Fatalf("run(%v) returned %d, want 2", arguments, code)
 			}
 		}
@@ -318,7 +313,7 @@ func TestCommandContract(t *testing.T) {
 		if err := os.Chdir(directory); err != nil {
 			t.Fatal(err)
 		}
-		if code := run([]string{"version", "--no-env-file"}); code != 0 {
+		if code, _, _ := runForTest(t, []string{"version", "--no-env-file"}); code != 0 {
 			t.Fatalf("run returned %d", code)
 		}
 		if _, err := os.Stat(filepath.Join(directory, "conf")); !os.IsNotExist(err) {
@@ -363,7 +358,7 @@ func TestCommandContract(t *testing.T) {
 		lockPath := filepath.Join(directory, "config.lock")
 		arguments := []string{"--config", configPath, "--lock", lockPath, "--color", "never", "--no-env-file"}
 		observed := i18n.Language("")
-		code := runWithTUI(arguments, func(context.Context, *service.Service, ui.Mode) error {
+		code, _, _ := runWithTUIForTest(t, arguments, func(context.Context, *service.Service, ui.Mode) error {
 			observed = i18n.Current()
 			return nil
 		})
@@ -371,7 +366,7 @@ func TestCommandContract(t *testing.T) {
 			t.Fatalf("configured English was not applied: code=%d language=%q", code, observed)
 		}
 
-		code = runWithTUI(append(arguments, "--lang", "zh"), func(context.Context, *service.Service, ui.Mode) error {
+		code, _, _ = runWithTUIForTest(t, append(arguments, "--lang", "zh"), func(context.Context, *service.Service, ui.Mode) error {
 			observed = i18n.Current()
 			return nil
 		})

@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly STATICCHECK_VERSION="v0.8.1"
 readonly GOVULNCHECK_VERSION="v1.7.0"
-readonly GOSEC_VERSION="v2.28.0"
+readonly GOSEC_VERSION="v2.29.0"
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"

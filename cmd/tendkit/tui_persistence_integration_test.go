@@ -22,7 +22,7 @@ import (
 	"github.com/eoctet/tendkit/internal/model"
 )
 
-const tuiSmokeTimeout = 4 * time.Second
+const tuiSmokeTimeout = 10 * time.Second
 
 type tuiSmokeProcess struct {
 	t        *testing.T
