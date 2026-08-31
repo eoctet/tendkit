@@ -122,10 +122,11 @@ func TestRunnerLifecycleFlow(t *testing.T) {
 		}
 	})
 	t.Run("idle-timeout-resets-on-output", func(t *testing.T) {
-		// Leave enough startup margin for the login shell while keeping the total
-		// runtime longer than one idle interval, so the test still proves resets.
-		r := Runner{IdleTimeout: 500 * time.Millisecond}
-		result, err := r.Run(context.Background(), "printf a; sleep 0.3; printf b; sleep 0.3; printf c", nil)
+		// Hosted runners can need several hundred milliseconds to schedule the
+		// login shell. Keep wide startup margin while making the total runtime
+		// longer than one idle interval, so the test still proves timer resets.
+		r := Runner{IdleTimeout: 2 * time.Second}
+		result, err := r.Run(context.Background(), "printf a; sleep 1.2; printf b; sleep 1.2; printf c", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
