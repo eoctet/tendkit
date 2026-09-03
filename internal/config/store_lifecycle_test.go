@@ -70,6 +70,39 @@ func TestConfigStoreLifecycle(t *testing.T) {
 			t.Fatal("symlink catalog accepted")
 		}
 	})
+	t.Run("execution-security-trusts-private-directory-inside-writable-parent", func(t *testing.T) {
+		sharedDirectory := filepath.Join(t.TempDir(), "shared")
+		privateDirectory := filepath.Join(sharedDirectory, "tendkit")
+		if err := os.MkdirAll(privateDirectory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(sharedDirectory, 0o770); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(privateDirectory, "config.json")
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := newStore(path, path+".lock").validateExecutionSecurity(); err != nil {
+			t.Fatalf("configuration inside private trust boundary rejected: %v", err)
+		}
+	})
+	t.Run("execution-security-rejects-config-directly-inside-writable-directory", func(t *testing.T) {
+		sharedDirectory := filepath.Join(t.TempDir(), "shared")
+		if err := os.Mkdir(sharedDirectory, 0o770); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(sharedDirectory, 0o770); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(sharedDirectory, "config.json")
+		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := newStore(path, path+".lock").validateExecutionSecurity(); err == nil {
+			t.Fatal("configuration directly inside writable directory accepted")
+		}
+	})
 	t.Run("unified-config-persists-schema-v1-apps-and-status", func(t *testing.T) {
 		store := testUnifiedStore(t)
 		value := testUnifiedConfig()

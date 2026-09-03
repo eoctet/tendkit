@@ -353,6 +353,12 @@ func (s store) validateExecutionSecurity() error {
 		if info.Mode().Perm()&0o022 != 0 && info.Mode()&os.ModeSticky == 0 {
 			return unsafeConfig(directory, i18n.T("config.reason_directory_writable"))
 		}
+		// A directory owned and accessible only by the current user is the
+		// execution trust boundary. Writable ancestors cannot modify entries
+		// inside it, so their permissions do not affect the loaded catalog.
+		if owner == os.Geteuid() && info.Mode().Perm()&0o077 == 0 {
+			return nil
+		}
 		parent := filepath.Dir(directory)
 		if parent == directory {
 			break
