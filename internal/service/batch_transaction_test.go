@@ -24,6 +24,10 @@ import (
 func saveTestConfig(t *testing.T, store *config.Center, value model.Config) model.Config {
 	t.Helper()
 	value.Settings.Downloader.CLI = "aria2c"
+	// Service transaction tests are hermetic and must not run the production
+	// full-batch Homebrew preprocessor against a developer workstation.
+	value.Settings.Scan.Packages.HomebrewFormula = false
+	value.Settings.Scan.Packages.HomebrewCask = false
 	for index := range value.Apps {
 		if value.Apps[index].StatusManaged.UpdateStatus == "" {
 			value.Apps[index].StatusManaged.UpdateStatus = model.StatusUnchecked
@@ -90,6 +94,44 @@ func testStore(directory string) *config.Center {
 
 func testConfigPath(directory string) string { return filepath.Join(directory, "config.json") }
 func TestServiceBatchTransaction(t *testing.T) {
+	t.Run("full-run-forwards-homebrew-preprocess-progress", func(t *testing.T) {
+		t.Setenv("HOMEBREW_NO_AUTO_UPDATE", "")
+		directory := t.TempDir()
+		binaryDirectory := filepath.Join(directory, "bin")
+		if err := os.MkdirAll(binaryDirectory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(binaryDirectory, "brew"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("PATH", binaryDirectory)
+		store := testStore(directory)
+		catalog := config.Default()
+		catalog.Settings.LogDir = filepath.Join(directory, "logs")
+		saveTestConfig(t, store, catalog)
+		snapshot, err := store.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		catalog = snapshot.Config
+		catalog.Settings.Scan.Packages.HomebrewFormula = true
+		if err := store.Save(snapshot.Revision, catalog); err != nil {
+			t.Fatal(err)
+		}
+		var progress []model.PreprocessProgress
+		_, _, err = runServiceRequest(context.Background(), &Service{config: store}, RunOptions{
+			CheckOnly: true, AllRequested: true,
+			Observer: RunObserver{PreprocessProgress: func(event model.PreprocessProgress) {
+				progress = append(progress, event)
+			}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(progress) != 2 || progress[0] != (model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew metadata update", Status: model.StatusStarted}) || progress[1].Status != model.StatusSuccess {
+			t.Fatalf("progress=%#v", progress)
+		}
+	})
 	t.Run("download-preflight-filters-non-download-actions-without-run-side-effects", func(t *testing.T) {
 		directory := t.TempDir()
 		store := testStore(directory)

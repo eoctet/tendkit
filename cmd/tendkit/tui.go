@@ -68,13 +68,14 @@ func runInteractiveTUI(ctx context.Context, applicationService *service.Service,
 		},
 		StartRun: func(runContext context.Context, request ui.TUIRunRequest, observer ui.TUIObserver) (*ui.TUIRunBatch, error) {
 			options := service.RunOptions{
-				Names: request.Names, CheckOnly: request.CheckOnly, DownloadAssets: request.DownloadAssets,
+				Names: request.Names, CheckOnly: request.CheckOnly, AllRequested: request.AllRequested, DownloadAssets: request.DownloadAssets,
 				DownloadOutput: observer.DownloadOutput,
 				CommandOutput:  observer.CommandOutput,
 				Observer: service.RunObserver{
 					AppStart: observer.AppStart, Result: observer.Result,
 					UpdateStart:   observer.UpdateStart,
 					DownloadStart: observer.DownloadStart, DownloadProgress: observer.DownloadProgress,
+					PreprocessProgress: observer.PreprocessProgress,
 				},
 			}
 			batch := service.NewBatch(options)
@@ -90,7 +91,7 @@ func runInteractiveTUI(ctx context.Context, applicationService *service.Service,
 			}()
 			return &ui.TUIRunBatch{
 				AddRequest: func(addition ui.TUIRunRequest) error {
-					return batch.Add(service.RunOptions{Names: addition.Names, CheckOnly: addition.CheckOnly, DownloadAssets: addition.DownloadAssets})
+					return batch.Add(service.RunOptions{Names: addition.Names, CheckOnly: addition.CheckOnly, AllRequested: addition.AllRequested, DownloadAssets: addition.DownloadAssets})
 				},
 				WaitResult: func() (model.Config, []model.Result, error) {
 					result := <-finished

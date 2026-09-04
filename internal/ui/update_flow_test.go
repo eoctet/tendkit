@@ -167,11 +167,70 @@ func TestTUIUpdateFlow(t *testing.T) {
 		}}
 		startTUIRun(context.Background(), &view, true, true, actions, events)
 		request := <-requests
-		if !request.CheckOnly || request.Names != nil {
+		if !request.CheckOnly || request.Names != nil || !request.AllRequested {
 			t.Fatalf("request = %#v", request)
 		}
 		if view.queue["obsidian"].Status != "waiting" {
 			t.Fatalf("all-apps run did not create waiting queue entries: %#v", view.queue)
+		}
+	})
+	t.Run("preprocess-progress-is-streamed-to-live-log", func(t *testing.T) {
+		useLanguage(t, i18n.Chinese)
+		view := sampleTUIView()
+		view.operationText = func(model.Config, string, string, string, string) ([]string, error) {
+			t.Fatal("Homebrew lifecycle feedback must bypass persistent log filtering")
+			return nil, nil
+		}
+		events := make(chan tuiEvent, 8)
+		release := make(chan struct{})
+		var observer TUIObserver
+		actions := TUIActions{StartRun: func(_ context.Context, _ TUIRunRequest, current TUIObserver) (*TUIRunBatch, error) {
+			observer = current
+			return &TUIRunBatch{
+				AddRequest: func(TUIRunRequest) error { return nil },
+				WaitResult: func() (model.Config, []model.Result, error) {
+					<-release
+					return view.catalog, nil, nil
+				},
+			}, nil
+		}}
+		startTUIRun(context.Background(), &view, true, true, actions, events)
+		for _, item := range []struct {
+			progress        model.PreprocessProgress
+			level           LogLevel
+			expectedSubject string
+		}{
+			{progress: model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew", Status: model.StatusStarted}, level: LogInfo, expectedSubject: "Homebrew"},
+			{progress: model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew", Status: model.StatusSuccess}, level: LogInfo, expectedSubject: "Homebrew"},
+			{progress: model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew", Status: model.StatusSkipped}, level: LogWarn, expectedSubject: "Homebrew"},
+			{progress: model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew", Status: model.StatusCancelled}, level: LogWarn, expectedSubject: "Homebrew"},
+			{progress: model.PreprocessProgress{Action: model.PreprocessActionHomebrew, Subject: "Homebrew", Status: model.StatusFailed}, level: LogError, expectedSubject: "Homebrew"},
+			{progress: model.PreprocessProgress{Action: "custom-cache", Status: model.StatusStarted}, level: LogInfo, expectedSubject: "custom-cache"},
+		} {
+			observer.PreprocessProgress(item.progress)
+			event := <-events
+			if event.eventType != tuiEventLog || !strings.Contains(event.text, item.expectedSubject) || !strings.Contains(event.text, string(item.level)) {
+				t.Fatalf("event=%#v", event)
+			}
+			handleTUIEvent(context.Background(), &view, event, actions, events)
+		}
+		logs := strings.Join(view.logs, "\n")
+		for _, expected := range []string{"开始预处理：Homebrew", "预处理完成：Homebrew", "已跳过预处理：Homebrew", "预处理已取消：Homebrew", "预处理失败：Homebrew"} {
+			if !strings.Contains(logs, expected) {
+				t.Fatalf("missing %q in logs: %s", expected, logs)
+			}
+		}
+		if !strings.Contains(logs, "custom-cache") || !strings.Contains(logs, "预处理") {
+			t.Fatalf("missing generic preprocess fallback in logs: %s", logs)
+		}
+		close(release)
+		select {
+		case event := <-events:
+			if event.eventType != tuiEventRunDone {
+				t.Fatalf("event=%#v", event)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("run goroutine did not finish")
 		}
 	})
 	t.Run("start-tui-run-failure-rolls-back-waiting-queue", func(t *testing.T) {
@@ -406,7 +465,7 @@ func TestTUIDownloadPreflightFlow(t *testing.T) {
 		handleDownloadAssetEvent(context.Background(), &view, <-events, actions, events)
 		request := <-requests
 
-		if len(request.Names) != 1 || request.Names[0] != "ready" || request.DownloadAssets["ready"] != "ready.dmg" {
+		if len(request.Names) != 1 || request.Names[0] != "ready" || request.DownloadAssets["ready"] != "ready.dmg" || !request.AllRequested {
 			t.Fatalf("partial preflight request = %#v", request)
 		}
 		if len(view.queue) != 1 || view.queue["ready"].Status != model.StatusWaiting {

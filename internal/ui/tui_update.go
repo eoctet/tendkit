@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/eoctet/tendkit/internal/model"
 	"github.com/eoctet/tendkit/internal/ui/component"
@@ -176,7 +177,7 @@ func startTUIRun(parent context.Context, view *tuiModel, checkOnly, all bool, ac
 		view.setMessage(i18n.T("tui.operation_already_queued", target), false)
 		return
 	}
-	spec := tuiRunSpec{request: TUIRunRequest{Names: names, CheckOnly: checkOnly}, target: target, apps: apps}
+	spec := tuiRunSpec{request: TUIRunRequest{Names: names, CheckOnly: checkOnly, AllRequested: all}, target: target, apps: apps}
 	if !checkOnly && actions.DownloadAssetCandidates != nil {
 		if view.preflightCancel != nil {
 			view.preflightCancel()
@@ -441,6 +442,10 @@ func launchTUIRun(parent context.Context, view *tuiModel, spec tuiRunSpec, actio
 		DownloadProgress: func(progress model.DownloadProgress) {
 			events <- tuiEvent{eventType: tuiEventDownloadProgress, progress: progress}
 		},
+		PreprocessProgress: func(progress model.PreprocessProgress) {
+			level, message := preprocessTUILog(progress)
+			emitTUIOperationText(events, level, "system", preprocessAction(progress), message)
+		},
 		DownloadOutput: func(app model.Application) (io.WriteCloser, io.WriteCloser) {
 			return newTUIDownloadOutput(downloadCatalog, downloadFormat, downloadWriter, events, app)
 		},
@@ -464,6 +469,45 @@ func launchTUIRun(parent context.Context, view *tuiModel, spec tuiRunSpec, actio
 		commandOutput.Flush()
 		events <- tuiEvent{eventType: tuiEventRunDone, config: config, items: results, err: err}
 	}()
+}
+
+func preprocessTUILog(progress model.PreprocessProgress) (LogLevel, string) {
+	subject := preprocessSubject(progress)
+	switch progress.Status {
+	case model.StatusStarted:
+		return LogInfo, i18n.T("tui.preprocess_started", subject)
+	case model.StatusSuccess:
+		return LogInfo, i18n.T("tui.preprocess_completed", subject)
+	case model.StatusSkipped:
+		return LogWarn, i18n.T("tui.preprocess_skipped", subject)
+	case model.StatusCancelled:
+		return LogWarn, i18n.T("tui.preprocess_cancelled", subject)
+	default:
+		return LogError, i18n.T("tui.preprocess_failed", subject)
+	}
+}
+
+func preprocessSubject(progress model.PreprocessProgress) string {
+	if subject := strings.TrimSpace(progress.Subject); subject != "" {
+		return subject
+	}
+	return preprocessAction(progress)
+}
+
+func preprocessAction(progress model.PreprocessProgress) string {
+	if action := strings.TrimSpace(progress.Action); action != "" {
+		return action
+	}
+	return "-"
+}
+
+// emitTUIOperationText intentionally bypasses the persistent log threshold:
+// lifecycle feedback must remain visible while a batch is blocked in preprocessing.
+// Messages are localized summaries; detailed command errors remain in the redacted run log.
+func emitTUIOperationText(events chan<- tuiEvent, level LogLevel, operation, subject, message string) {
+	for _, line := range FormatLogLines(time.Now(), level, operation, subject, message) {
+		events <- tuiEvent{eventType: tuiEventLog, text: line}
+	}
 }
 
 func queueTUIApps(view *tuiModel, spec tuiRunSpec) {

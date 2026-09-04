@@ -18,6 +18,8 @@ import (
 type RunOptions struct {
 	Names     []string
 	CheckOnly bool
+	// AllRequested preserves the initial all-apps scope after target filtering.
+	AllRequested bool
 	// DownloadAssets is an ephemeral appID -> downloadable artifact choice. It is never
 	// written to catalog configuration.
 	DownloadAssets map[string]string
@@ -27,13 +29,14 @@ type RunOptions struct {
 	Observer       RunObserver
 }
 
-// RunObserver receives lifecycle events for one update operation.
+// RunObserver receives lifecycle events for one batch operation.
 type RunObserver struct {
-	AppStart         func(model.Result)
-	Result           func(model.Result)
-	UpdateStart      func(model.Result)
-	DownloadStart    func(model.Result)
-	DownloadProgress func(model.DownloadProgress)
+	AppStart           func(model.Result)
+	Result             func(model.Result)
+	UpdateStart        func(model.Result)
+	DownloadStart      func(model.Result)
+	DownloadProgress   func(model.DownloadProgress)
+	PreprocessProgress func(model.PreprocessProgress)
 }
 
 // DownloadAssetCandidates obtains downloadable artifact choices before a run. It does not save
@@ -111,7 +114,7 @@ func (batch *Batch) Add(options RunOptions) error {
 		batch.pending = append(batch.pending, options)
 		return nil
 	}
-	return batch.updater.Add(updater.RunOptions{Names: options.Names, CheckOnly: options.CheckOnly, DownloadAssets: options.DownloadAssets})
+	return batch.updater.Add(updater.RunOptions{Names: options.Names, CheckOnly: options.CheckOnly, AllRequested: options.AllRequested, DownloadAssets: options.DownloadAssets})
 }
 
 // Run executes a fixed request through a service-owned batch.
@@ -171,8 +174,9 @@ func (s *Service) prepareRunExecution(options RunOptions, batch *Batch) (*servic
 		Logger:   sharedLogger,
 		AppStart: options.Observer.AppStart, Output: options.Observer.Result, UpdateStart: options.Observer.UpdateStart,
 		DownloadStart: options.Observer.DownloadStart, DownloadProgress: options.Observer.DownloadProgress,
-		DownloadOutput: options.DownloadOutput,
-		CommandOutput:  options.CommandOutput,
+		PreprocessProgress: options.Observer.PreprocessProgress,
+		DownloadOutput:     options.DownloadOutput,
+		CommandOutput:      options.CommandOutput,
 	})
 	if err != nil {
 		return execution, err
@@ -196,7 +200,7 @@ func (batch *Batch) bind(facade *updater.Updater) error {
 		return errors.New(i18n.T("app.batch_required"))
 	}
 	for _, request := range batch.pending {
-		if err := facade.Add(updater.RunOptions{Names: request.Names, CheckOnly: request.CheckOnly, DownloadAssets: request.DownloadAssets}); err != nil {
+		if err := facade.Add(updater.RunOptions{Names: request.Names, CheckOnly: request.CheckOnly, AllRequested: request.AllRequested, DownloadAssets: request.DownloadAssets}); err != nil {
 			return err
 		}
 	}

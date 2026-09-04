@@ -20,18 +20,20 @@ import (
 type TUIRunRequest struct {
 	Names          []string
 	CheckOnly      bool
+	AllRequested   bool
 	DownloadAssets map[string]string
 }
 
 // TUIObserver receives bounded operation events and output streams.
 type TUIObserver struct {
-	AppStart         func(model.Result)
-	Result           func(model.Result)
-	UpdateStart      func(model.Result)
-	DownloadStart    func(model.Result)
-	DownloadProgress func(model.DownloadProgress)
-	DownloadOutput   func(model.Application) (io.WriteCloser, io.WriteCloser)
-	CommandOutput    func(model.CommandOutput)
+	AppStart           func(model.Result)
+	Result             func(model.Result)
+	UpdateStart        func(model.Result)
+	DownloadStart      func(model.Result)
+	DownloadProgress   func(model.DownloadProgress)
+	PreprocessProgress func(model.PreprocessProgress)
+	DownloadOutput     func(model.Application) (io.WriteCloser, io.WriteCloser)
+	CommandOutput      func(model.CommandOutput)
 }
 
 // TUIDownloadAssetObserver reports download preflight progress before a run starts.

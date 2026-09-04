@@ -26,6 +26,7 @@ const (
 type RunOptions struct {
 	Names          []string
 	CheckOnly      bool
+	AllRequested   bool
 	DownloadAssets map[string]string
 }
 
@@ -77,13 +78,14 @@ func (batch *batch) close() {
 
 // Options supplies presentation callbacks and command streams for one run.
 type Options struct {
-	LogDir           string
-	Logger           *logutil.Logger
-	AppStart         func(model.Result)
-	Output           func(model.Result)
-	UpdateStart      func(model.Result)
-	DownloadStart    func(model.Result)
-	DownloadProgress func(model.DownloadProgress)
+	LogDir             string
+	Logger             *logutil.Logger
+	AppStart           func(model.Result)
+	Output             func(model.Result)
+	UpdateStart        func(model.Result)
+	DownloadStart      func(model.Result)
+	DownloadProgress   func(model.DownloadProgress)
+	PreprocessProgress func(model.PreprocessProgress)
 	// DownloadOutput opens stdout and stderr for one application's download command.
 	DownloadOutput func(model.Application) (io.WriteCloser, io.WriteCloser)
 	CommandOutput  func(model.CommandOutput)
@@ -116,6 +118,7 @@ type Updater struct {
 	engine      engine
 	logger      *logutil.Logger
 	catalog     model.Config
+	preprocess  func(context.Context)
 	targetCount int
 	started     time.Time
 	batch       *batch
@@ -208,9 +211,13 @@ func New(catalog model.Config, options Options) (*Updater, error) {
 			logger.AddSensitiveEnvironment(app.Environment)
 		}
 	}
+	preprocessor := newBatchPreprocessor(logger, options.PreprocessProgress, defaultPreprocessActions()...)
 	return &Updater{
 		catalog: catalog,
 		logger:  logger,
+		preprocess: func(ctx context.Context) {
+			preprocessor.run(ctx, catalog)
+		},
 		engine: engine{Config: catalog, checker: checker, logger: logger,
 			AppStart: options.AppStart, Output: options.Output, UpdateStart: options.UpdateStart, DownloadStart: options.DownloadStart, DownloadProgress: options.DownloadProgress,
 			DownloadOutput: options.DownloadOutput},
@@ -236,6 +243,9 @@ func (u *Updater) Run(ctx context.Context, persist func(model.Config, []model.Re
 	u.targetCount = batchTargetCount(u.catalog, u.batch)
 	u.started = time.Now()
 	_ = u.logger.Info(logutil.LogEntry{Event: logEventRunStarted, Operation: model.OperationBatch, Status: model.StatusStarted, Message: "batch run started", TargetCount: u.targetCount, WorkerCount: u.catalog.Settings.Workers})
+	if u.preprocess != nil && u.batch.startsWithFullRequest() {
+		u.preprocess(ctx)
+	}
 	catalog, results := u.engine.runBatch(ctx, u.catalog, u.batch)
 	if err := ctx.Err(); err != nil {
 		_ = u.logger.Warn(logutil.LogEntry{Event: logEventRunCancelled, Operation: model.OperationBatch, Status: model.StatusCancelled, Message: "batch run cancelled", DurationMS: time.Since(u.started).Milliseconds()})
@@ -295,6 +305,12 @@ func batchTargetCount(catalog model.Config, batch *batch) int {
 		return len(catalog.Apps)
 	}
 	return len(batch.requests[0].Names)
+}
+
+func (batch *batch) startsWithFullRequest() bool {
+	batch.mu.Lock()
+	defer batch.mu.Unlock()
+	return len(batch.requests) > 0 && batch.requests[0].AllRequested
 }
 
 func failedResultCount(results []model.Result) int {
