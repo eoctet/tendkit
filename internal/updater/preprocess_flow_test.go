@@ -230,6 +230,7 @@ func testInitialRequestControlsBatchPreprocess(t *testing.T) {
 }
 
 func testHomebrewDeadlineFailureDoesNotBlockWorkers(t *testing.T) {
+	t.Setenv(homebrewNoAutoUpdateKey, "")
 	directory := t.TempDir()
 	installed := filepath.Join(directory, "installed")
 	if err := os.WriteFile(installed, []byte("present"), 0o600); err != nil {
