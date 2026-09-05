@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"strconv"
 	"time"
 
@@ -55,26 +56,18 @@ func (s *Service) PreviewScan(ctx context.Context, observer ScanObserver) (ScanP
 		runner := runtimeutil.Runner{IdleTimeout: time.Duration(catalog.Settings.TimeoutSeconds) * time.Second}
 		candidate, candidateState, err := (scanner.Scanner{Runner: runner, Progress: observer.Progress, Diagnostic: scanDiagnosticLogger(log), GitHub: s.githubResolver(catalog)}).Scan(ctx, catalog, state)
 		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), "", time.Since(started), 0))
-			} else {
-				_ = log.Error(scanLogEntry("scan_failed", model.StatusFailed, "scan operation failed", err.Error(), "", time.Since(started), 0))
-			}
+			logScanFailure(log, ctx, started, "", err)
 			return err
 		}
 		saved, err := s.savePreviewStatuses(baseCatalog, persistExistingStatuses(baseCatalog, candidate))
 		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), "", time.Since(started), 0))
-			} else {
-				_ = log.Error(scanLogEntry("scan_failed", model.StatusFailed, "scan operation failed", err.Error(), "", time.Since(started), 0))
-			}
+			logScanFailure(log, ctx, started, "", err)
 			return err
 		}
 		preview = ScanPreview{
 			BaseConfig: saved, BaseState: candidateState,
 			Config: candidate, State: candidateState, Changes: scanApplicationChanges(current, candidate.Apps),
-			Added: addedApps(currentIDs, candidate.Apps), Removed: removedApps(current, candidate.Apps),
+			Added: applicationsOutsideIDs(currentIDs, candidate.Apps), Removed: removedApps(current, candidate.Apps),
 			Excluded: scanner.ExcludedConfiguredApps(saved),
 		}
 		_ = log.Info(scanLogEntry("scan_finished", model.StatusSuccess, "scan lifecycle event", "", "", time.Since(started), len(preview.Added)+len(preview.Removed)))
@@ -111,11 +104,7 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 		applicationScanner.DownloadDir = catalog.Settings.Downloader.StorePath
 		candidate, candidateState, err := applicationScanner.ScanApplication(ctx, target, candidateState)
 		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), target.ID, time.Since(started), 0))
-			} else {
-				_ = log.Error(scanLogEntry("scan_failed", model.StatusFailed, "scan operation failed", err.Error(), target.ID, time.Since(started), 0))
-			}
+			logScanFailure(log, ctx, started, target.ID, err)
 			return err
 		}
 		replaced := false
@@ -131,11 +120,7 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 		}
 		saved, err := s.savePreviewStatuses(baseCatalog, persistExistingStatuses(baseCatalog, candidateCatalog))
 		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
-				_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), target.ID, time.Since(started), 0))
-			} else {
-				_ = log.Error(scanLogEntry("scan_failed", model.StatusFailed, "scan operation failed", err.Error(), target.ID, time.Since(started), 0))
-			}
+			logScanFailure(log, ctx, started, target.ID, err)
 			return err
 		}
 		currentIDs := appIDs(catalog.Apps)
@@ -143,7 +128,7 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 			BaseConfig: saved, BaseState: candidateState,
 			Config: candidateCatalog, State: candidateState,
 			Changes:  scanApplicationChanges(catalog.Apps, candidateCatalog.Apps),
-			Added:    addedApps(currentIDs, candidateCatalog.Apps),
+			Added:    applicationsOutsideIDs(currentIDs, candidateCatalog.Apps),
 			Excluded: scanner.ExcludedConfiguredApps(baseCatalog),
 		}
 		_ = log.Info(scanLogEntry("scan_finished", model.StatusSuccess, "scan lifecycle event", "", target.ID, time.Since(started), 1))
@@ -154,6 +139,14 @@ func (s *Service) PreviewApplicationScan(ctx context.Context, target model.Appli
 
 func scanLogEntry(event, status, message, detail, subject string, duration time.Duration, count int) logutil.LogEntry {
 	return logutil.LogEntry{Event: event, Operation: "scan", Status: status, AppID: subject, Message: message, Detail: detail, DurationMS: duration.Milliseconds(), ResultCount: count}
+}
+
+func logScanFailure(log *logutil.Logger, ctx context.Context, started time.Time, subject string, err error) {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		_ = log.Warn(scanLogEntry("scan_cancelled", model.StatusCancelled, "scan operation cancelled", err.Error(), subject, time.Since(started), 0))
+		return
+	}
+	_ = log.Error(scanLogEntry("scan_failed", model.StatusFailed, "scan operation failed", err.Error(), subject, time.Since(started), 0))
 }
 
 func scanDiagnosticLogger(log *logutil.Logger) func(scanner.Diagnostic) {
@@ -190,9 +183,7 @@ func (s *Service) githubResolver(catalog model.Config) scanner.GitHubResolver {
 
 func cloneScanState(state model.RuntimeState) model.RuntimeState {
 	cloned := model.RuntimeState{Observations: make(map[string]model.ScanObservation, len(state.Observations))}
-	for id, observation := range state.Observations {
-		cloned.Observations[id] = observation
-	}
+	maps.Copy(cloned.Observations, state.Observations)
 	return cloned
 }
 
@@ -268,25 +259,18 @@ func appIDs(apps []model.Application) map[string]struct{} {
 	return ids
 }
 
-func addedApps(existingIDs map[string]struct{}, proposed []model.Application) []model.Application {
-	added := make([]model.Application, 0)
-	for _, app := range proposed {
-		if _, exists := existingIDs[app.ID]; !exists {
-			added = append(added, app)
+func applicationsOutsideIDs(excludedIDs map[string]struct{}, applications []model.Application) []model.Application {
+	result := make([]model.Application, 0)
+	for _, app := range applications {
+		if _, exists := excludedIDs[app.ID]; !exists {
+			result = append(result, app)
 		}
 	}
-	return added
+	return result
 }
 
 func removedApps(existing, proposed []model.Application) []model.Application {
-	proposedIDs := appIDs(proposed)
-	removed := make([]model.Application, 0)
-	for _, application := range existing {
-		if _, exists := proposedIDs[application.ID]; !exists {
-			removed = append(removed, application)
-		}
-	}
-	return removed
+	return applicationsOutsideIDs(appIDs(proposed), existing)
 }
 
 func scanApplicationChanges(current, proposed []model.Application) []model.ScanApplicationChange {
@@ -358,12 +342,7 @@ func cloneApplications(applications []model.Application) []model.Application {
 
 func cloneApplication(application model.Application) model.Application {
 	cloned := application
-	if application.Environment != nil {
-		cloned.Environment = make(map[string]string, len(application.Environment))
-		for key, value := range application.Environment {
-			cloned.Environment[key] = value
-		}
-	}
+	cloned.Environment = maps.Clone(application.Environment)
 	if application.Provider.Actions != nil {
 		actions := *application.Provider.Actions
 		actions.Download = cloneDownload(application.Provider.DownloadAction())

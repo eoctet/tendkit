@@ -2,8 +2,9 @@ package ui
 
 import (
 	"context"
-
 	"errors"
+	"maps"
+
 	"github.com/eoctet/tendkit/internal/model"
 	"github.com/eoctet/tendkit/pkg/i18n"
 
@@ -75,7 +76,7 @@ func TestTUIScanResolutionFlow(t *testing.T) {
 		view.scanChanges = map[string]model.ScanApplicationChange{other.ID: {Current: other, Proposed: pending, Fields: []model.ScanFieldChange{{Field: "description", Proposed: pending.Description}}}}
 		view.scanCompleted = true
 		view.scanObservations = map[string]model.ScanObservation{target.ID: {Found: true, Path: target.InstallPath}, other.ID: {Found: true, Path: other.InstallPath}}
-		view.state.Observations = cloneScanObservations(view.scanObservations)
+		view.state.Observations = maps.Clone(view.scanObservations)
 		base := cloneConfig(view.catalog)
 		candidate := cloneConfig(base)
 		updated, _ := findApplication(&candidate, target.ID)
@@ -362,7 +363,7 @@ func TestTUIScanResolutionFlow(t *testing.T) {
 			return cloneConfig(catalog), nil
 		}}
 
-		handleScanPartialKey(&view, "enter", actions)
+		handleScanPartialKey(&view, "enter")
 		if view.scanConfirm != scanConfirmPartial || saves != 0 {
 			t.Fatalf("partial merge skipped confirmation: confirm=%q saves=%d", view.scanConfirm, saves)
 		}

@@ -11,6 +11,7 @@ import (
 	"context"
 	"github.com/eoctet/tendkit/pkg/i18n"
 
+	"slices"
 	"strings"
 	"testing"
 )
@@ -306,7 +307,7 @@ func TestTUIUpdateFlow(t *testing.T) {
 
 		startTUIRun(context.Background(), &view, true, true, TUIActions{}, make(chan tuiEvent, 1))
 		request := <-requests
-		if !request.CheckOnly || len(request.Names) != 11 || containsString(request.Names, "obsidian") {
+		if !request.CheckOnly || len(request.Names) != 11 || slices.Contains(request.Names, "obsidian") {
 			t.Fatalf("all-applications request = %#v", request)
 		}
 		if len(view.queue) != 12 {

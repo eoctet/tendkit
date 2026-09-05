@@ -205,10 +205,10 @@ func renderTUI(output io.Writer, view *tuiModel) {
 		configHeight := height - footerHeight - contentTop
 		renderConfigPage(screen, view, contentTop, configHeight)
 	case tuiScan:
-		upperHeight, lowerTop, lowerHeight := stackedPageLayout(height, contentTop, footerHeight)
+		upperHeight, lowerTop, lowerHeight := stackedPageLayout(height, footerHeight)
 		renderScanPage(screen, view, contentTop, upperHeight, lowerTop, lowerHeight)
 	default:
-		upperHeight, lowerTop, lowerHeight := stackedPageLayout(height, contentTop, footerHeight)
+		upperHeight, lowerTop, lowerHeight := stackedPageLayout(height, footerHeight)
 		renderAppsPage(screen, view, contentTop, upperHeight)
 		renderLogs(screen, view, lowerTop, lowerHeight)
 	}
@@ -261,10 +261,10 @@ func newTUIScreenForOutput(output io.Writer, mode Mode, width, height int) *tuiS
 	return screen
 }
 
-func stackedPageLayout(height, contentTop, footerHeight int) (upperHeight, lowerTop, lowerHeight int) {
+func stackedPageLayout(height, footerHeight int) (upperHeight, lowerTop, lowerHeight int) {
 	lowerHeight = max(8, height*31/100)
 	lowerTop = height - footerHeight - lowerHeight
-	upperHeight = lowerTop - contentTop
+	upperHeight = lowerTop - 3
 	return upperHeight, lowerTop, lowerHeight
 }
 
@@ -442,23 +442,14 @@ func renderApplicationTable(screen *tuiScreen, view *tuiModel, x, y, width, heig
 		return
 	}
 	widths := applicationTableColumnWidths(width)
-	numberWidth, nameWidth, modeWidth := widths[0], widths[1], widths[2]
-	currentWidth, latestWidth := widths[3], widths[4]
-	columnX := []int{x + 1, x + 1 + numberWidth, x + 1 + numberWidth + nameWidth, x + 1 + numberWidth + nameWidth + modeWidth, x + 1 + numberWidth + nameWidth + modeWidth + currentWidth, x + 1 + numberWidth + nameWidth + modeWidth + currentWidth + latestWidth}
+	columnX := tableColumnStarts(x+1, widths)
 	headings := []string{i18n.T("label.number"), i18n.T("label.name"), i18n.T("label.update_mode"), i18n.T("label.current_version"), i18n.T("label.latest_version"), i18n.T("label.status")}
-	for index := range headings {
-		screen.put(columnX[index], y+1, truncateTUI(headings[index], widths[index]-1), tuiBold)
-	}
+	renderTableHeader(screen, columnX, y+1, headings, widths)
 	screen.put(x+1, y+2, strings.Repeat("─", width-2), tuiDim)
 	visible := max(1, height-4)
-	if view.selected < view.scroll {
-		view.scroll = view.selected
-	}
-	if view.selected >= view.scroll+visible {
-		view.scroll = view.selected - visible + 1
-	}
-	end := min(len(view.catalog.Apps), view.scroll+visible)
-	for index := view.scroll; index < end; index++ {
+	view.scroll = revealSelection(view.selected, view.scroll, visible)
+	start, end := visibleTableRange(len(view.catalog.Apps), view.scroll, visible)
+	for index := start; index < end; index++ {
 		row := y + 3 + index - view.scroll
 		app := view.catalog.Apps[index]
 		state := app.StatusManaged
@@ -493,18 +484,36 @@ func applicationTableColumnWidths(width int) []int {
 	// Each width includes one trailing gutter. At the common 120-column
 	// terminal size the application panel has 76 usable cells; reserve enough room for
 	// complete operational headings instead of assigning all surplus to Name.
-	widths := []int{5, 14, 14, 16, 15, 12}
-	minimums := []int{4, 8, 9, 9, 10, 9}
-	caps := []int{5, 28, 16, 22, 22, 14}
-	available := max(1, width-2)
+	return solveColumnWidths(width-2, columnLayout{
+		Initial:     []int{5, 14, 14, 16, 15, 12},
+		Minimum:     []int{4, 8, 9, 9, 10, 9},
+		Maximum:     []int{5, 28, 16, 22, 22, 14},
+		ShrinkOrder: []int{1, 3, 4, 2, 5, 0},
+		GrowOrder:   []int{3, 4, 2, 5, 1},
+		FillColumn:  1,
+	})
+}
+
+type columnLayout struct {
+	Initial     []int
+	Minimum     []int
+	Maximum     []int
+	ShrinkOrder []int
+	GrowOrder   []int
+	FillColumn  int
+}
+
+func solveColumnWidths(available int, layout columnLayout) []int {
+	available = max(1, available)
+	widths := append([]int(nil), layout.Initial...)
 	total := sumInts(widths)
 	for total > available {
 		changed := false
-		for _, index := range []int{1, 3, 4, 2, 5, 0} {
+		for _, index := range layout.ShrinkOrder {
 			if total <= available {
 				break
 			}
-			if widths[index] > minimums[index] {
+			if widths[index] > layout.Minimum[index] {
 				widths[index]--
 				total--
 				changed = true
@@ -516,22 +525,44 @@ func applicationTableColumnWidths(width int) []int {
 	}
 	for total < available {
 		changed := false
-		for _, index := range []int{3, 4, 2, 5, 1} {
+		for _, index := range layout.GrowOrder {
 			if total >= available {
 				break
 			}
-			if widths[index] < caps[index] {
+			if widths[index] < layout.Maximum[index] {
 				widths[index]++
 				total++
 				changed = true
 			}
 		}
 		if !changed {
-			widths[1] += available - total
+			widths[layout.FillColumn] += available - total
 			break
 		}
 	}
 	return widths
+}
+
+func tableColumnStarts(start int, widths []int) []int {
+	columns := make([]int, len(widths))
+	if len(columns) == 0 {
+		return columns
+	}
+	columns[0] = start
+	for index := 1; index < len(columns); index++ {
+		columns[index] = columns[index-1] + widths[index-1]
+	}
+	return columns
+}
+
+func renderTableHeader(screen *tuiScreen, columns []int, y int, headings []string, widths []int) {
+	for index, heading := range headings {
+		screen.put(columns[index], y, truncateTUI(heading, widths[index]-1), tuiBold)
+	}
+}
+
+func visibleTableRange(count, offset, visible int) (int, int) {
+	return offset, min(count, offset+visible)
 }
 
 func sumInts(values []int) int {
@@ -563,7 +594,7 @@ func renderApplicationDetails(screen *tuiScreen, view *tuiModel, x, y, width, he
 	}
 	lines, labelWidth := applicationDetailLines(view, width)
 	available := max(1, height-2)
-	view.detailOffset = max(0, min(max(0, len(lines)-available), view.detailOffset))
+	view.detailOffset = boundedOffset(view.detailOffset, 0, maximumOffset(len(lines), available))
 	end := min(len(lines), view.detailOffset+available)
 	valueX := x + labelWidth + 2
 	for index, line := range lines[view.detailOffset:end] {
@@ -685,13 +716,10 @@ func renderConfigPage(screen *tuiScreen, view *tuiModel, top, height int) {
 	visible := max(1, height-3)
 	if selectedVisual < visible {
 		view.configScroll = 0
-	} else if selectedVisual < view.configScroll {
-		view.configScroll = selectedVisual
+	} else {
+		view.configScroll = revealSelection(selectedVisual, view.configScroll, visible)
 	}
-	if selectedVisual >= view.configScroll+visible {
-		view.configScroll = selectedVisual - visible + 1
-	}
-	view.configScroll = max(0, min(view.configScroll, max(0, len(visual)-visible)))
+	view.configScroll = boundedOffset(view.configScroll, 0, maximumOffset(len(visual), visible))
 	end := min(len(visual), view.configScroll+visible)
 	for visualIndex := view.configScroll; visualIndex < end; visualIndex++ {
 		line := visual[visualIndex]
@@ -1054,11 +1082,15 @@ func editValueViewport(value string, cursor, width int) string {
 }
 
 func wrappedTUILogs(view *tuiModel) []string {
-	lines := make([]string, 0, len(view.logs))
-	for _, logLine := range view.logs {
-		lines = append(lines, wrapTUI(logLine, max(1, view.width-4))...)
+	return wrapLogLines(view.logs, max(1, view.width-4))
+}
+
+func wrapLogLines(lines []string, width int) []string {
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, wrapTUI(line, width)...)
 	}
-	return lines
+	return wrapped
 }
 
 func tuiLogViewportHeight(view *tuiModel) int {
@@ -1078,10 +1110,10 @@ func tuiDetailViewportHeight(view *tuiModel) int {
 func tuiApplicationListViewportHeight(view *tuiModel) int {
 	footerHeight := tuiFooterHeight(view)
 	if view.page == tuiScan {
-		upperHeight, _, _ := stackedPageLayout(view.height, 3, footerHeight)
+		upperHeight, _, _ := stackedPageLayout(view.height, footerHeight)
 		return max(1, upperHeight-4)
 	}
-	_, _, lowerHeight := stackedPageLayout(view.height, 3, footerHeight)
+	_, _, lowerHeight := stackedPageLayout(view.height, footerHeight)
 	upperHeight := view.height - 3 - lowerHeight - footerHeight
 	return max(1, upperHeight-4)
 }
@@ -1097,11 +1129,29 @@ func tuiMaxDetailOffset(view *tuiModel) int {
 	leftWidth := view.width * 67 / 100
 	rightWidth := view.width - leftWidth
 	lines, _ := applicationDetailLines(view, max(1, rightWidth-2))
-	return max(0, len(lines)-tuiDetailViewportHeight(view))
+	return maximumOffset(len(lines), tuiDetailViewportHeight(view))
 }
 
 func tuiMaxLogOffset(view *tuiModel) int {
-	return max(0, len(wrappedTUILogs(view))-tuiLogViewportHeight(view))
+	return maximumOffset(len(wrappedTUILogs(view)), tuiLogViewportHeight(view))
+}
+
+func maximumOffset(lineCount, viewportHeight int) int {
+	return max(0, lineCount-viewportHeight)
+}
+
+func boundedOffset(current, delta, maximum int) int {
+	return max(0, min(maximum, current+delta))
+}
+
+func revealSelection(selected, offset, visible int) int {
+	if selected < offset {
+		return selected
+	}
+	if selected >= offset+visible {
+		return selected - visible + 1
+	}
+	return offset
 }
 
 func renderConfirmation(screen *tuiScreen, view *tuiModel) {

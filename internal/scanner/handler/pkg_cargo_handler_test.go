@@ -14,6 +14,24 @@ import (
 )
 
 func TestCargoHandlerContract(t *testing.T) {
+	t.Run("manager-absolute-path-is-cleaned-before-command-and-environment", func(t *testing.T) {
+		runner := &nodeRunner{run: func(context.Context, string) (runtimeutil.Result, error) {
+			return runtimeutil.Result{}, nil
+		}}
+		h := NewCargo(runner)
+		h.lookPath = func(string) (string, error) { return "/fixture//bin/../bin/./cargo", nil }
+		h.getenv = func(string) string { return "" }
+		root := t.TempDir()
+		result := h.Scan(context.Background(), Request{Configured: []model.Application{{
+			Provider: model.ProviderConfig{Type: model.ProviderCargo}, Environment: map[string]string{"CARGO_INSTALL_ROOT": root},
+		}}})
+		if !result.Complete || result.Err != nil || len(result.Candidates) != 0 {
+			t.Fatalf("result=%#v", result)
+		}
+		if !slices.Equal(runner.calls, []string{"/fixture/bin/cargo install --list --root " + runtimeutil.QuoteShell(root)}) || len(runner.envs) != 1 || runner.envs[0]["PATH"] != "/fixture/bin" || runner.envs[0]["CARGO_INSTALL_ROOT"] != root {
+			t.Fatalf("commands=%v environments=%v", runner.calls, runner.envs)
+		}
+	})
 	t.Run("cargo-install-root-rejects-complex-or-duplicate-cargo-home-config", func(t *testing.T) {
 		for _, test := range []struct {
 			name, content string

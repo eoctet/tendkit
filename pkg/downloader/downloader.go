@@ -214,10 +214,6 @@ type aria2LogWriter struct {
 
 const aria2MaxLogLineBytes = 64 * 1024
 
-func newAria2LogWriter(target io.Writer) *aria2LogWriter {
-	return newAria2ProgressWriter(target, nil)
-}
-
 func newAria2ProgressWriter(target io.Writer, progress *progressReporter) *aria2LogWriter {
 	if target == nil {
 		target = io.Discard
@@ -226,40 +222,49 @@ func newAria2ProgressWriter(target io.Writer, progress *progressReporter) *aria2
 }
 
 func (writer *aria2LogWriter) Write(data []byte) (int, error) {
+	return writeLogBuffer(&writer.buffer, data, writer.emit)
+}
+
+func (writer *aria2LogWriter) Flush() error {
+	return flushLogBuffer(&writer.buffer, writer.emit)
+}
+
+// writeLogBuffer consumes buffered bytes before emitting, including on failure.
+func writeLogBuffer(buffer *string, data []byte, emit func(string) error) (int, error) {
 	written := len(data)
-	writer.buffer += string(data)
+	*buffer += string(data)
 	for {
-		index := strings.IndexAny(writer.buffer, "\r\n")
+		index := strings.IndexAny(*buffer, "\r\n")
 		if index < 0 {
 			break
 		}
-		line := writer.buffer[:index]
+		line := (*buffer)[:index]
 		next := index + 1
-		if next < len(writer.buffer) && writer.buffer[index] == '\r' && writer.buffer[next] == '\n' {
+		if next < len(*buffer) && (*buffer)[index] == '\r' && (*buffer)[next] == '\n' {
 			next++
 		}
-		writer.buffer = writer.buffer[next:]
-		if err := writer.emit(line); err != nil {
+		*buffer = (*buffer)[next:]
+		if err := emit(line); err != nil {
 			return 0, err
 		}
 	}
-	for len(writer.buffer) > aria2MaxLogLineBytes {
-		chunk := strings.ToValidUTF8(writer.buffer[:aria2MaxLogLineBytes], "�") + "…"
-		writer.buffer = writer.buffer[aria2MaxLogLineBytes:]
-		if err := writer.emit(chunk); err != nil {
+	for len(*buffer) > aria2MaxLogLineBytes {
+		chunk := strings.ToValidUTF8((*buffer)[:aria2MaxLogLineBytes], "�") + "…"
+		*buffer = (*buffer)[aria2MaxLogLineBytes:]
+		if err := emit(chunk); err != nil {
 			return 0, err
 		}
 	}
 	return written, nil
 }
 
-func (writer *aria2LogWriter) Flush() error {
-	if writer.buffer == "" {
+func flushLogBuffer(buffer *string, emit func(string) error) error {
+	if *buffer == "" {
 		return nil
 	}
-	line := writer.buffer
-	writer.buffer = ""
-	return writer.emit(line)
+	line := *buffer
+	*buffer = ""
+	return emit(line)
 }
 
 func (writer *aria2LogWriter) emit(line string) error {
@@ -331,40 +336,11 @@ func newCurlProgressWriter(target io.Writer, progress *progressReporter) *curlPr
 }
 
 func (writer *curlProgressWriter) Write(data []byte) (int, error) {
-	written := len(data)
-	writer.buffer += string(data)
-	for {
-		index := strings.IndexAny(writer.buffer, "\r\n")
-		if index < 0 {
-			break
-		}
-		line := writer.buffer[:index]
-		next := index + 1
-		if next < len(writer.buffer) && writer.buffer[index] == '\r' && writer.buffer[next] == '\n' {
-			next++
-		}
-		writer.buffer = writer.buffer[next:]
-		if err := writer.emit(line); err != nil {
-			return 0, err
-		}
-	}
-	for len(writer.buffer) > aria2MaxLogLineBytes {
-		chunk := strings.ToValidUTF8(writer.buffer[:aria2MaxLogLineBytes], "�") + "…"
-		writer.buffer = writer.buffer[aria2MaxLogLineBytes:]
-		if err := writer.emit(chunk); err != nil {
-			return 0, err
-		}
-	}
-	return written, nil
+	return writeLogBuffer(&writer.buffer, data, writer.emit)
 }
 
 func (writer *curlProgressWriter) Flush() error {
-	if writer.buffer == "" {
-		return nil
-	}
-	line := writer.buffer
-	writer.buffer = ""
-	return writer.emit(line)
+	return flushLogBuffer(&writer.buffer, writer.emit)
 }
 
 func (writer *curlProgressWriter) emit(line string) error {

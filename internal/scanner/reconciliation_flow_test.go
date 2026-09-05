@@ -17,7 +17,48 @@ import (
 	"github.com/eoctet/tendkit/internal/scanner/handler"
 )
 
+func catalogApplicationByID(apps []model.Application, id string) (model.Application, bool) {
+	for _, app := range apps {
+		if app.ID == id {
+			return cloneApplication(app), true
+		}
+	}
+	return model.Application{}, false
+}
+
 func TestScannerReconciliationFlow(t *testing.T) {
+	t.Run("removal-preserves-in-place-slice-semantics", func(t *testing.T) {
+		for _, target := range []string{"catalog", "discovered"} {
+			for _, tc := range []struct {
+				name                 string
+				input, want, backing []model.Application
+			}{
+				{"nil", nil, nil, nil},
+				{"empty", []model.Application{}, []model.Application{}, []model.Application{}},
+				{"no match", []model.Application{{ID: "keep"}}, []model.Application{{ID: "keep"}}, []model.Application{{ID: "keep"}}},
+				{"all removed", []model.Application{{ID: "drop"}, {ID: "drop"}}, []model.Application{}, []model.Application{{ID: "drop"}, {ID: "drop"}}},
+				{"duplicates and order", []model.Application{{ID: "drop"}, {ID: "b"}, {ID: "drop"}, {ID: "a"}}, []model.Application{{ID: "b"}, {ID: "a"}}, []model.Application{{ID: "b"}, {ID: "a"}, {ID: "drop"}, {ID: "a"}}},
+			} {
+				t.Run(target+"/"+tc.name, func(t *testing.T) {
+					session := scanSession{catalog: model.Config{Apps: tc.input}, discovered: tc.input}
+					var got []model.Application
+					if target == "catalog" {
+						session.removeCatalogID("drop")
+						got = session.catalog.Apps
+					} else {
+						session.removeDiscoveredID("drop")
+						got = session.discovered
+					}
+					if !reflect.DeepEqual(got, tc.want) || cap(got) != cap(tc.input) || !reflect.DeepEqual(tc.input, tc.backing) {
+						t.Fatalf("result=%#v cap=%d backing=%#v", got, cap(got), tc.input)
+					}
+					if len(tc.input) > 0 && &got[:cap(got)][0] != &tc.input[0] {
+						t.Fatal("removal replaced backing array")
+					}
+				})
+			}
+		}
+	})
 	t.Run("canonical-owned-proposal-preserves-owner-actions-without-baseline", func(t *testing.T) {
 		canonical := model.Application{Provider: model.ProviderConfig{Type: model.ProviderGitHubRelease, Actions: &model.ProviderActions{Version: "path --version"}}}
 		owner := model.Application{Provider: model.ProviderConfig{Type: model.ProviderDefault, Actions: &model.ProviderActions{Version: "owner --version", Check: "owner check", Update: "owner update"}}}

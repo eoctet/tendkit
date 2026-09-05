@@ -83,8 +83,9 @@ func expandConfiguredPath(value string, homeDir func() (string, error)) string {
 	return value
 }
 
+// managerPath accepts only absolute paths, including after configuration expansion.
 func managerPath(binary string, configured []model.Application, lookPath func(string) (string, error), stat func(string) (os.FileInfo, error), homeDir func() (string, error)) string {
-	if path, err := lookPath(binary); err == nil {
+	if path, err := lookPath(binary); err == nil && filepath.IsAbs(path) {
 		return path
 	}
 	for _, app := range configured {
@@ -92,6 +93,9 @@ func managerPath(binary string, configured []model.Application, lookPath func(st
 			continue
 		}
 		path := expandConfiguredPath(app.InstallPath, homeDir)
+		if !filepath.IsAbs(path) {
+			continue
+		}
 		if info, err := stat(path); err == nil && !info.IsDir() {
 			return path
 		}
@@ -99,7 +103,7 @@ func managerPath(binary string, configured []model.Application, lookPath func(st
 	return ""
 }
 
-func inventoryError(ecosystem string, err error, exit int) error {
+func inventoryError(ecosystem string, err error) error {
 	if err != nil {
 		return err
 	}

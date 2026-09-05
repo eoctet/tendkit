@@ -624,15 +624,6 @@ func canonicalOwnedProposal(canonical, owner, baseline model.Application, baseli
 	return proposal
 }
 
-func catalogApplicationByID(apps []model.Application, id string) (model.Application, bool) {
-	for _, app := range apps {
-		if app.ID == id {
-			return cloneApplication(app), true
-		}
-	}
-	return model.Application{}, false
-}
-
 func (session *scanSession) upsertCatalogApplication(app model.Application) {
 	for index := range session.catalog.Apps {
 		if session.catalog.Apps[index].ID == app.ID {
@@ -654,23 +645,21 @@ func (session *scanSession) replaceDiscoveredApplication(id string, app model.Ap
 }
 
 func (session *scanSession) removeCatalogID(id string) {
-	filtered := session.catalog.Apps[:0]
-	for _, app := range session.catalog.Apps {
-		if app.ID != id {
-			filtered = append(filtered, app)
-		}
-	}
-	session.catalog.Apps = filtered
+	session.catalog.Apps = removeApplicationIDInPlace(session.catalog.Apps, id)
 }
 
 func (session *scanSession) removeDiscoveredID(id string) {
-	filtered := session.discovered[:0]
-	for _, app := range session.discovered {
+	session.discovered = removeApplicationIDInPlace(session.discovered, id)
+}
+
+func removeApplicationIDInPlace(apps []model.Application, id string) []model.Application {
+	filtered := apps[:0]
+	for _, app := range apps {
 		if app.ID != id {
 			filtered = append(filtered, app)
 		}
 	}
-	session.discovered = filtered
+	return filtered
 }
 
 func canonicalPathIfValid(value string) []string {

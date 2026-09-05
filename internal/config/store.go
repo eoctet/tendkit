@@ -410,15 +410,6 @@ func validateScanVersionControl(values map[string]map[string]model.ScanKeepResol
 	return nil
 }
 
-func readConfigJSON(path string, target *model.Config) error {
-	// #nosec G304 -- The caller supplies the explicitly configured catalog path; strict parsing validates its contents.
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return parseConfigJSON(data, target, path)
-}
-
 func parseConfigJSON(data []byte, target *model.Config, path string) error {
 	var document map[string]json.RawMessage
 	if err := json.Unmarshal(data, &document); err != nil {

@@ -41,10 +41,7 @@ func (h *CargoHandler) Scan(ctx context.Context, request Request) Result {
 	if cargo == "" {
 		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "cargo"}}
 	}
-	cargo, err := filepath.Abs(cargo)
-	if err != nil {
-		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "cargo"}}
-	}
+	cargo = filepath.Clean(cargo)
 	root := h.cargoInstallRoot(request.Configured)
 	if root == "" {
 		return Result{Complete: false, Err: &PackageInventoryIncompleteError{Ecosystem: ecosystem, Message: "Cargo install root unavailable"}}
@@ -53,7 +50,7 @@ func (h *CargoHandler) Scan(ctx context.Context, request Request) Result {
 	reportPackageProgress(request, model.ScanStagePackageList, "Cargo")
 	r, err := h.runner.Run(ctx, runtimeutil.QuoteShell(cargo)+" install --list --root "+runtimeutil.QuoteShell(root), environment)
 	if err != nil || r.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError(ecosystem, err, r.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, err)}
 	}
 	entries, parseErr := parseCargoInstallList(r.Stdout)
 	if parseErr != nil {

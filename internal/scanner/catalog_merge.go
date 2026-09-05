@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,9 +132,7 @@ func installedPathValue(path string) string {
 // an explicit PATH is replaced with the install directory plus the process PATH.
 func scanEnvironment(app model.Application) map[string]string {
 	environment := make(map[string]string, len(app.Environment)+1)
-	for key, value := range app.Environment {
-		environment[key] = value
-	}
+	maps.Copy(environment, app.Environment)
 	path := installedPathValue(app.InstallPath)
 	if path != "" && (filepath.IsAbs(path) || strings.Contains(path, string(filepath.Separator))) {
 		environment["PATH"] = strings.Join(uniqueStrings([]string{filepath.Dir(path), os.Getenv("PATH")}), string(os.PathListSeparator))
@@ -172,12 +171,7 @@ func scanEnabledFor(app model.Application, settings model.ScanSettings) bool {
 // cloneApplication deep-copies mutable configuration fields used by a scan snapshot.
 func cloneApplication(app model.Application) model.Application {
 	cloned := app
-	if app.Environment != nil {
-		cloned.Environment = map[string]string{}
-		for k, v := range app.Environment {
-			cloned.Environment[k] = v
-		}
-	}
+	cloned.Environment = maps.Clone(app.Environment)
 	if app.Provider.Actions != nil {
 		actions := *app.Provider.Actions
 		if actions.Download != nil {
@@ -200,11 +194,6 @@ func cloneApplications(apps []model.Application) []model.Application {
 
 func cloneRuntimeState(state model.RuntimeState) model.RuntimeState {
 	cloned := state
-	if state.Observations != nil {
-		cloned.Observations = map[string]model.ScanObservation{}
-		for k, v := range state.Observations {
-			cloned.Observations[k] = v
-		}
-	}
+	cloned.Observations = maps.Clone(state.Observations)
 	return cloned
 }

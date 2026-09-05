@@ -27,6 +27,14 @@ import (
 	"syscall"
 )
 
+func newAria2LogWriter(target io.Writer) *aria2LogWriter {
+	return newAria2ProgressWriter(target, nil)
+}
+
+type logBufferTestSink func([]byte) (int, error)
+
+func (sink logBufferTestSink) Write(data []byte) (int, error) { return sink(data) }
+
 func testDownloaderSettings(binary, directory string) Settings {
 	return Settings{
 		CLI: binary, StorePath: directory,
@@ -362,6 +370,96 @@ func TestDownloaderFlow(t *testing.T) {
 		}
 	})
 }
+func TestDownloaderLogBufferContract(t *testing.T) {
+	type logWriter interface {
+		io.Writer
+		Flush() error
+	}
+	for _, adapter := range []struct {
+		name      string
+		newWriter func(io.Writer) logWriter
+	}{
+		{"aria2", func(target io.Writer) logWriter { return newAria2ProgressWriter(target, nil) }},
+		{"curl", func(target io.Writer) logWriter { return newCurlProgressWriter(target, nil) }},
+	} {
+		t.Run(adapter.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name   string
+				chunks []string
+				want   string
+			}{
+				{"empty", []string{""}, ""},
+				{"mixed-delimiters", []string{"one\rtwo\nthree\r\nfour"}, "one\ntwo\nthree\nfour\n"},
+				{"split-crlf", []string{"one\r", "\ntw", "o\n", "tail"}, "one\ntwo\ntail\n"},
+				{"exact-limit", []string{strings.Repeat("x", aria2MaxLogLineBytes)}, strings.Repeat("x", aria2MaxLogLineBytes) + "\n"},
+				{"over-limit", []string{strings.Repeat("x", aria2MaxLogLineBytes) + "tail"}, strings.Repeat("x", aria2MaxLogLineBytes) + "…\ntail\n"},
+				{"utf8-byte-boundary", []string{strings.Repeat("x", aria2MaxLogLineBytes-1) + "中tail"}, strings.Repeat("x", aria2MaxLogLineBytes-1) + "�…\n\xb8\xadtail\n"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					var output bytes.Buffer
+					writer := adapter.newWriter(&output)
+					for _, chunk := range tc.chunks {
+						if n, err := writer.Write([]byte(chunk)); err != nil || n != len(chunk) {
+							t.Fatalf("Write = %d, %v", n, err)
+						}
+					}
+					for range 2 {
+						if err := writer.Flush(); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if output.String() != tc.want {
+						t.Fatalf("output = %q, want %q", output.String(), tc.want)
+					}
+				})
+			}
+			for _, phase := range []string{"line", "chunk", "flush"} {
+				t.Run("failure/"+phase, func(t *testing.T) {
+					failure := errors.New("sink failure")
+					var output bytes.Buffer
+					fail := true
+					writer := adapter.newWriter(logBufferTestSink(func(data []byte) (int, error) {
+						if fail {
+							return 0, failure
+						}
+						return output.Write(data)
+					}))
+					input := "lost\nkept"
+					if phase == "chunk" {
+						input = strings.Repeat("x", aria2MaxLogLineBytes) + "kept"
+					}
+					if phase == "flush" {
+						input = "lost"
+					}
+					n, err := writer.Write([]byte(input))
+					if phase == "flush" {
+						if err != nil || n != len(input) {
+							t.Fatalf("Write = %d, %v", n, err)
+						}
+						err = writer.Flush()
+					} else if n != 0 {
+						t.Fatalf("failed Write count = %d", n)
+					}
+					if !errors.Is(err, failure) {
+						t.Fatalf("error = %v", err)
+					}
+					fail = false
+					if err := writer.Flush(); err != nil {
+						t.Fatal(err)
+					}
+					want := "kept\n"
+					if phase == "flush" {
+						want = ""
+					}
+					if output.String() != want {
+						t.Fatalf("remaining output = %q, want %q", output.String(), want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestDownloaderArgumentContract(t *testing.T) {
 	t.Run("merge-downloader-extra-args-overrides-and-appends-application-options", func(t *testing.T) {
 		for _, test := range []struct {

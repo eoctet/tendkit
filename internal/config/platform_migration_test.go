@@ -16,6 +16,15 @@ import (
 	"reflect"
 )
 
+func readConfigJSON(path string, target *model.Config) error {
+	// #nosec G304 -- The caller supplies the explicitly configured catalog path; strict parsing validates its contents.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return parseConfigJSON(data, target, path)
+}
+
 func TestConfigPlatformMigration(t *testing.T) {
 	t.Run("non-macos-load-backs-up-and-cleans-application-configuration", func(t *testing.T) {
 		store := testUnifiedStore(t)

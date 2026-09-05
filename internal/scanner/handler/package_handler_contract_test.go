@@ -76,6 +76,105 @@ func newNode(r Runner, npm string) *NodeHandler {
 	return h
 }
 func TestPackageHandlerContract(t *testing.T) {
+	t.Run("manager-path-requires-expanded-absolute-path", func(t *testing.T) {
+		t.Setenv("TENDKIT_TEST_MANAGER_ROOT", "/fixture")
+		for _, tc := range []struct {
+			name, lookup, configured, want string
+			homeFails                      bool
+		}{
+			{name: "absolute PATH wins", lookup: "/path/npm", configured: "tools/npm", want: "/path/npm"},
+			{name: "absolute fallback", configured: "/fixture/npm", want: "/fixture/npm"},
+			{name: "relative fallback rejected", configured: "tools/npm"},
+			{name: "relative PATH rejected", lookup: "tools/npm"},
+			{name: "relative PATH continues fallback", lookup: "tools/npm", configured: "/fixture/npm", want: "/fixture/npm"},
+			{name: "home expanded", configured: "~/npm", want: "/fixture/npm"},
+			{name: "environment expanded", configured: "$TENDKIT_TEST_MANAGER_ROOT/npm", want: "/fixture/npm"},
+			{name: "home failure rejected", configured: "~/npm", homeFails: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				lookup := func(string) (string, error) {
+					if tc.lookup == "" {
+						return "", ErrNotFound
+					}
+					return tc.lookup, nil
+				}
+				stat := func(path string) (fs.FileInfo, error) {
+					if !filepath.IsAbs(path) {
+						t.Fatalf("relative path reached stat: %q", path)
+					}
+					return fixtureFileInfo{}, nil
+				}
+				home := func() (string, error) {
+					if tc.homeFails {
+						return "", ErrNotFound
+					}
+					return "/fixture", nil
+				}
+				apps := []model.Application{{ID: "NPM", InstallPath: tc.configured}}
+				if got := managerPath("npm", apps, lookup, stat, home); got != tc.want {
+					t.Fatalf("manager = %q, want %q", got, tc.want)
+				}
+			})
+		}
+		t.Run("skip relative and directory before valid absolute fallback", func(t *testing.T) {
+			var checked []string
+			apps := []model.Application{{ID: "npm", InstallPath: "tools/npm"}, {Name: "npm", InstallPath: "/directory"}, {Name: "NPM", InstallPath: "/fixture/npm"}}
+			got := managerPath("npm", apps, func(string) (string, error) { return "", ErrNotFound }, func(path string) (fs.FileInfo, error) {
+				checked = append(checked, path)
+				return fixtureFileInfo{dir: path == "/directory"}, nil
+			}, func() (string, error) { return "/fixture", nil })
+			if got != "/fixture/npm" || !slices.Equal(checked, []string{"/directory", "/fixture/npm"}) {
+				t.Fatalf("manager=%q stat calls=%v", got, checked)
+			}
+		})
+	})
+	t.Run("relative-manager-config-is-unavailable-without-execution", func(t *testing.T) {
+		lookup := func(string) (string, error) { return "", ErrNotFound }
+		stat := func(string) (fs.FileInfo, error) { return fixtureFileInfo{}, nil }
+		for _, name := range []string{"npm", "uv", "cargo", "brew-formula", "brew-cask", "ruby"} {
+			t.Run(name, func(t *testing.T) {
+				runner := &nodeRunner{run: func(context.Context, string) (runtimeutil.Result, error) {
+					t.Fatal("relative manager must not execute")
+					return runtimeutil.Result{}, nil
+				}}
+				var h Handler
+				binary := name
+				switch name {
+				case "npm":
+					value := NewNode(runner)
+					value.lookPath, value.stat = lookup, stat
+					h = value
+				case "uv":
+					value := NewUV(runner)
+					value.lookPath, value.stat = lookup, stat
+					h = value
+				case "cargo":
+					value := NewCargo(runner)
+					value.lookPath, value.stat = lookup, stat
+					h = value
+				case "brew-formula":
+					value := NewHomebrewFormula(runner)
+					value.lookPath, value.stat = lookup, stat
+					value.host = func() string { return "darwin" }
+					h, binary = value, "brew"
+				case "brew-cask":
+					value := NewHomebrewCask(runner)
+					value.lookPath, value.stat = lookup, stat
+					value.host = func() string { return "darwin" }
+					h, binary = value, "brew"
+				case "ruby":
+					value := NewRuby(runner)
+					value.lookPath, value.stat = lookup, stat
+					h = value
+				}
+				result := h.Scan(context.Background(), Request{Configured: []model.Application{{ID: binary, InstallPath: "tools/" + binary}}})
+				var unavailable *PackageManagerUnavailableError
+				if result.Complete || len(result.Candidates) != 0 || !errors.As(result.Err, &unavailable) || len(runner.calls) != 0 {
+					t.Fatalf("result=%#v commands=%v", result, runner.calls)
+				}
+			})
+		}
+	})
 	t.Run("node-handler-golden-candidate-and-environment", func(t *testing.T) {
 		npm := "/fixture/node/bin/npm"
 		r := &nodeRunner{run: func(_ context.Context, command string) (runtimeutil.Result, error) {
@@ -159,7 +258,7 @@ func TestPackageHandlerContract(t *testing.T) {
 			}
 			return path, nil
 		}
-		if paths, ok := h.binEvidence(packagePath, prefix, "tool", map[string]string{"tool": "bin/tool.js"}); !ok || !slices.Equal(paths, []string{link}) {
+		if paths, ok := h.binEvidence(packagePath, prefix, map[string]string{"tool": "bin/tool.js"}); !ok || !slices.Equal(paths, []string{link}) {
 			t.Fatalf("direct evidence paths=%v ok=%v", paths, ok)
 		}
 		result := h.Scan(context.Background(), Request{})
@@ -220,7 +319,7 @@ func TestPackageHandlerContract(t *testing.T) {
 				}
 			}
 			h.stat = func(string) (fs.FileInfo, error) { return fixtureFileInfo{}, nil }
-			paths, ok := h.binEvidence("/package", "/prefix", "tool", map[string]string{"z-tool": "bin/z", "a-tool": "bin/a"})
+			paths, ok := h.binEvidence("/package", "/prefix", map[string]string{"z-tool": "bin/z", "a-tool": "bin/a"})
 			if !ok || !slices.Equal(paths, []string{"/prefix/bin/a-tool", "/prefix/bin/z-tool"}) {
 				t.Fatalf("paths=%v ok=%v", paths, ok)
 			}
@@ -270,7 +369,7 @@ func TestPackageHandlerContract(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				h := newNode(nil, "/npm")
 				h.stat, h.evalSymlinks = test.stat, test.eval
-				if paths, ok := h.binEvidence("/package", "/prefix", "tool", test.bins); ok || len(paths) != 0 {
+				if paths, ok := h.binEvidence("/package", "/prefix", test.bins); ok || len(paths) != 0 {
 					t.Fatalf("unsafe evidence paths=%v ok=%v", paths, ok)
 				}
 			})

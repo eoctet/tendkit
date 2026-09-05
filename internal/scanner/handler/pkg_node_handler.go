@@ -12,7 +12,6 @@ import (
 	"github.com/eoctet/tendkit/internal/model"
 	metadatautil "github.com/eoctet/tendkit/pkg/metadata"
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
-	"github.com/eoctet/tendkit/pkg/version"
 )
 
 type NodeHandler struct {
@@ -100,13 +99,13 @@ func (h *NodeHandler) Scan(ctx context.Context, r Request) Result {
 		versionCommand, _ := metadatautil.PackageVersionCommand(target)
 		updateCommand, _ := metadatautil.PackageUpdateCommand(target)
 		app := model.Application{ID: "pkg-node-" + packageSlug(name), Name: name, Type: model.ApplicationTypePackage, Description: meta.description, URL: meta.url, InstallPath: path, Enabled: true, UpdateMode: model.ModeAuto, Provider: model.ProviderConfig{Type: model.ProviderNPM, Actions: &model.ProviderActions{Version: versionCommand, Update: updateCommand}}, Package: name, Identity: model.PackageIdentity(string(h.Domain()), name), ScanManaged: true}
-		candidate := Candidate{Application: app, CurrentVersion: version.Normalize(item.Version), Aliases: []string{"node:" + name}}
+		candidate := packageCandidate(app, item.Version, "node:"+name)
 		if !meta.manifestComplete || (meta.binDeclared && (!meta.binValid || !prefixOK)) {
 			out.Complete = false
 			continue
 		}
 		if len(meta.bin) > 0 {
-			paths, valid := h.binEvidence(path, prefix, name, meta.bin)
+			paths, valid := h.binEvidence(path, prefix, meta.bin)
 			if !valid {
 				out.Complete = false
 				continue
@@ -175,7 +174,7 @@ func nodeBinName(name string) string { return strings.TrimPrefix(filepath.Base(n
 func validExecutableName(name string) bool {
 	return name != "" && name != "." && name != ".." && filepath.Base(name) == name && !strings.ContainsAny(name, `/\\`)
 }
-func (h *NodeHandler) binEvidence(installPath, prefix, packageName string, bins map[string]string) ([]string, bool) {
+func (h *NodeHandler) binEvidence(installPath, prefix string, bins map[string]string) ([]string, bool) {
 	if !filepath.IsAbs(prefix) {
 		return nil, false
 	}
@@ -223,18 +222,7 @@ func (h *NodeHandler) binEvidence(installPath, prefix, packageName string, bins 
 	return paths, len(paths) > 0
 }
 func (h *NodeHandler) manager(configured []model.Application) string {
-	if p, e := h.lookPath("npm"); e == nil {
-		return p
-	}
-	for _, a := range configured {
-		if strings.EqualFold(a.ID, "npm") || strings.EqualFold(a.Name, "npm") {
-			path := expandConfiguredPath(a.InstallPath, h.homeDir)
-			if info, e := h.stat(path); e == nil && !info.IsDir() {
-				return path
-			}
-		}
-	}
-	return ""
+	return managerPath("npm", configured, h.lookPath, h.stat, h.homeDir)
 }
 func (h *NodeHandler) environment(npm string, configured []model.Application) map[string]string {
 	dirs := []string{filepath.Dir(npm)}

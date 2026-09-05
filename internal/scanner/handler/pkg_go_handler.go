@@ -11,7 +11,6 @@ import (
 	"github.com/eoctet/tendkit/internal/model"
 	metadatautil "github.com/eoctet/tendkit/pkg/metadata"
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
-	"github.com/eoctet/tendkit/pkg/version"
 )
 
 type GoHandler struct {
@@ -32,12 +31,7 @@ func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
 	if goBin == "" {
 		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "go"}}
 	}
-	report := func(stage, subject string) {
-		if r.Report != nil {
-			r.Report(Progress{Stage: stage, Subject: subject})
-		}
-	}
-	report(model.ScanStagePackagePaths, "Go")
+	reportPackageProgress(r, model.ScanStagePackagePaths, "Go")
 	env, err := h.runner.Run(ctx, runtimeutil.QuoteShell(goBin)+" env GOPATH GOBIN", nil)
 	if err != nil || env.ExitCode != 0 {
 		if err == nil {
@@ -75,7 +69,7 @@ func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
 				}
 				continue
 			}
-			report(model.ScanStageApplication, entry.Name())
+			reportPackageProgress(r, model.ScanStageApplication, entry.Name())
 			if e := ctx.Err(); e != nil {
 				out.Complete = false
 				out.Err = e
@@ -110,7 +104,9 @@ func (h *GoHandler) Scan(ctx context.Context, r Request) Result {
 			versionCommand, _ := metadatautil.PackageVersionCommand(target)
 			updateCommand, _ := metadatautil.PackageUpdateCommand(target)
 			app := model.Application{ID: "pkg-go-" + packageSlug(entry.Name()), Name: entry.Name(), Type: model.ApplicationTypePackage, Description: "Go command provided by " + module, URL: goGitHubURL(module), InstallPath: binary, Enabled: true, UpdateMode: model.ModeAuto, Provider: model.ProviderConfig{Type: model.ProviderDefault, Actions: &model.ProviderActions{Version: versionCommand, Check: runtimeutil.QuoteShell(goBin) + " list -m -f '{{.Version}}' " + runtimeutil.QuoteShell(module+"@latest"), Update: updateCommand}}, Package: command, Identity: model.PackageIdentity(string(h.Domain()), command), ScanManaged: true}
-			out.Candidates = append(out.Candidates, Candidate{Application: app, CurrentVersion: version.Normalize(current), Aliases: []string{"go:" + module}, Evidence: &InstallationEvidence{Source: string(h.Domain()), Package: command, ExecutablePaths: []string{binary}, InstallRoot: dir}})
+			candidate := packageCandidate(app, current, "go:"+module)
+			candidate.Evidence = &InstallationEvidence{Source: string(h.Domain()), Package: command, ExecutablePaths: []string{binary}, InstallRoot: dir}
+			out.Candidates = append(out.Candidates, candidate)
 		}
 	}
 	if !out.Complete && out.Err == nil {

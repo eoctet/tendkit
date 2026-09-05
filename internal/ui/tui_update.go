@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -519,7 +520,7 @@ func queueTUIApps(view *tuiModel, spec tuiRunSpec) {
 		view.queue[app.ID] = model.Result{
 			AppID: app.ID, Name: app.Name, Mode: mode, Status: model.StatusWaiting, State: app.StatusManaged,
 		}
-		if !containsString(view.queueOrder, app.ID) {
+		if !slices.Contains(view.queueOrder, app.ID) {
 			view.queueOrder = append(view.queueOrder, app.ID)
 		}
 	}

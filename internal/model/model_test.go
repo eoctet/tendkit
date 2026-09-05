@@ -292,6 +292,20 @@ func TestModelScanStateContract(t *testing.T) {
 }
 
 func TestModelCloneContract(t *testing.T) {
+	t.Run("scan keep maps preserve nil and empty shapes", func(t *testing.T) {
+		original := Config{ScanVersionControl: map[string]map[string]ScanKeepResolution{
+			"nil": nil, "empty": {},
+		}}
+		cloned := CloneConfig(original)
+		if !reflect.DeepEqual(cloned.ScanVersionControl, original.ScanVersionControl) {
+			t.Fatalf("scan keep shapes changed: %#v", cloned.ScanVersionControl)
+		}
+		cloned.ScanVersionControl["empty"]["name"] = ScanKeepResolution{Fingerprint: "changed"}
+		delete(cloned.ScanVersionControl, "nil")
+		if _, exists := original.ScanVersionControl["nil"]; !exists || len(original.ScanVersionControl["empty"]) != 0 {
+			t.Fatalf("scan keep clone shares maps: %#v", original.ScanVersionControl)
+		}
+	})
 	t.Run("clone does not share mutable state", func(t *testing.T) {
 		original := Config{
 			Settings: Settings{

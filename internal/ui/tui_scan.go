@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"maps"
 	"reflect"
 	"sort"
 	"strconv"
@@ -94,7 +95,7 @@ func finishTUIScan(view *tuiModel, event tuiEvent) {
 	view.scanLogOffset = 0
 	if event.key == "" {
 		view.scanProposed = applicationMap(event.scan.Config.Apps)
-		view.scanObservations = cloneScanObservations(event.scan.State.Observations)
+		view.scanObservations = maps.Clone(event.scan.State.Observations)
 		view.scanChanges = changeMap(event.scan.Changes)
 		view.scanAdded = applicationFlagMap(event.scan.Added)
 		view.scanRemoved = applicationFlagMap(event.scan.Removed)
@@ -623,12 +624,7 @@ func cloneScanApplication(application model.Application) model.Application {
 		actions := *application.Provider.Actions
 		cloned.Provider.Actions = &actions
 	}
-	if application.Environment != nil {
-		cloned.Environment = make(map[string]string, len(application.Environment))
-		for key, value := range application.Environment {
-			cloned.Environment[key] = value
-		}
-	}
+	cloned.Environment = maps.Clone(application.Environment)
 	if application.Provider.DownloadAction() != nil {
 		download := *application.Provider.DownloadAction()
 		download.ExtraArgs = append([]string(nil), application.Provider.DownloadAction().ExtraArgs...)
@@ -788,7 +784,7 @@ func beginPartialMerge(view *tuiModel) {
 	view.partialFields = map[string]bool{}
 }
 
-func handleScanPartialKey(view *tuiModel, key string, actions TUIActions) {
+func handleScanPartialKey(view *tuiModel, key string) {
 	change, found := view.scanChanges[view.scanConfirmID]
 	if !found {
 		finishPartialMerge(view)
@@ -1092,9 +1088,7 @@ func persistScanKeep(view *tuiModel, actions TUIActions) {
 		catalog.ScanVersionControl = map[string]map[string]model.ScanKeepResolution{}
 	}
 	fields := make(map[string]model.ScanKeepResolution, len(catalog.ScanVersionControl[id])+len(change.Fields))
-	for field, resolution := range catalog.ScanVersionControl[id] {
-		fields[field] = resolution
-	}
+	maps.Copy(fields, catalog.ScanVersionControl[id])
 	for _, field := range change.Fields {
 		fingerprint := model.ScanKeepFingerprint(id, change.Current, change.Proposed, change.Fields, field)
 		if fingerprint == "" {
@@ -1253,7 +1247,7 @@ func (view *tuiModel) appendScanStructuredLog(level LogLevel, subject, message s
 }
 
 func scrollTUIScanLogs(view *tuiModel, delta int) {
-	view.scanLogOffset = max(0, min(tuiMaxScanLogOffset(view), view.scanLogOffset+delta))
+	view.scanLogOffset = boundedOffset(view.scanLogOffset, delta, tuiMaxScanLogOffset(view))
 }
 
 func selectedScanApplication(view *tuiModel) (model.Application, bool) {
@@ -1356,19 +1350,8 @@ func changeMap(changes []model.ScanApplicationChange) map[string]model.ScanAppli
 	return result
 }
 
-func cloneScanObservations(observations map[string]model.ScanObservation) map[string]model.ScanObservation {
-	if observations == nil {
-		return nil
-	}
-	result := make(map[string]model.ScanObservation, len(observations))
-	for id, observation := range observations {
-		result[id] = observation
-	}
-	return result
-}
-
 func cloneTUIState(state model.RuntimeState) model.RuntimeState {
-	state.Observations = cloneScanObservations(state.Observations)
+	state.Observations = maps.Clone(state.Observations)
 	return state
 }
 
@@ -1553,25 +1536,14 @@ func renderScanApplicationTable(screen *tuiScreen, view *tuiModel, x, y, width, 
 	}
 	view.scanSelected = max(0, min(view.scanSelected, len(apps)-1))
 	widths := scanTableColumnWidths(width)
-	columnX := make([]int, len(widths))
-	columnX[0] = x + 1
-	for index := 1; index < len(widths); index++ {
-		columnX[index] = columnX[index-1] + widths[index-1]
-	}
+	columnX := tableColumnStarts(x+1, widths)
 	headings := []string{i18n.T("label.number"), i18n.T("label.name"), i18n.T("label.current_version"), i18n.T("tui.scan.managed"), i18n.T("tui.scan.added_at")}
-	for index, heading := range headings {
-		screen.put(columnX[index], y+1, truncateTUI(heading, widths[index]-1), tuiBold)
-	}
+	renderTableHeader(screen, columnX, y+1, headings, widths)
 	screen.put(x+1, y+2, strings.Repeat("─", max(1, width-2)), tuiDim)
 	visible := max(1, height-4)
-	if view.scanSelected < view.scanScroll {
-		view.scanScroll = view.scanSelected
-	}
-	if view.scanSelected >= view.scanScroll+visible {
-		view.scanScroll = view.scanSelected - visible + 1
-	}
-	end := min(len(apps), view.scanScroll+visible)
-	for index := view.scanScroll; index < end; index++ {
+	view.scanScroll = revealSelection(view.scanSelected, view.scanScroll, visible)
+	start, end := visibleTableRange(len(apps), view.scanScroll, visible)
+	for index := start; index < end; index++ {
 		row := y + 3 + index - view.scanScroll
 		application := apps[index]
 		state := scanApplicationState(view, application.ID)
@@ -1610,34 +1582,17 @@ func tuiMaxScanDetailOffset(view *tuiModel, upperHeight int) int {
 	}
 	rightWidth := view.width - view.width*67/100
 	lines, _ := scanApplicationDetailLines(application, scanApplicationState(view, application.ID), max(1, rightWidth-2))
-	return max(0, len(lines)-max(1, upperHeight-4))
+	return maximumOffset(len(lines), max(1, upperHeight-4))
 }
 
 func scanTableColumnWidths(width int) []int {
-	available := max(1, width-2)
-	widths := []int{5, 24, 18, 12, 20}
-	minimums := []int{4, 10, 10, 8, 12}
-	total := sumInts(widths)
-	for total > available {
-		changed := false
-		for _, index := range []int{1, 4, 2, 3, 0} {
-			if total <= available {
-				break
-			}
-			if widths[index] > minimums[index] {
-				widths[index]--
-				total--
-				changed = true
-			}
-		}
-		if !changed {
-			break
-		}
-	}
-	if total < available {
-		widths[1] += available - total
-	}
-	return widths
+	return solveColumnWidths(width-2, columnLayout{
+		Initial:     []int{5, 24, 18, 12, 20},
+		Minimum:     []int{4, 10, 10, 8, 12},
+		Maximum:     []int{5, 24, 18, 12, 20},
+		ShrinkOrder: []int{1, 4, 2, 3, 0},
+		FillColumn:  1,
+	})
 }
 
 func renderScanApplicationDetails(screen *tuiScreen, view *tuiModel, x, y, width, height int) {
@@ -1651,8 +1606,8 @@ func renderScanApplicationDetails(screen *tuiScreen, view *tuiModel, x, y, width
 	}
 	lines, labelWidth := scanApplicationDetailLines(application, scanApplicationState(view, application.ID), width)
 	available := max(1, height-2)
-	maximum := max(0, len(lines)-available)
-	view.scanDetail = max(0, min(view.scanDetail, maximum))
+	maximum := maximumOffset(len(lines), available)
+	view.scanDetail = boundedOffset(view.scanDetail, 0, maximum)
 	end := min(len(lines), view.scanDetail+available)
 	valueX := x + labelWidth + 2
 	for index, line := range lines[view.scanDetail:end] {
@@ -1817,21 +1772,16 @@ func renderScanOutput(screen *tuiScreen, view *tuiModel, x, y, width, height int
 }
 
 func wrappedTUIScanLogs(view *tuiModel) []string {
-	width := max(1, view.width-4)
-	lines := make([]string, 0, len(view.scanLogs))
-	for _, logLine := range view.scanLogs {
-		lines = append(lines, wrapTUI(logLine, width)...)
-	}
-	return lines
+	return wrapLogLines(view.scanLogs, max(1, view.width-4))
 }
 
 func tuiScanLogViewportHeight(view *tuiModel) int {
-	_, _, lowerHeight := stackedPageLayout(view.height, 3, 3)
+	_, _, lowerHeight := stackedPageLayout(view.height, 3)
 	return max(1, lowerHeight-2)
 }
 
 func tuiMaxScanLogOffset(view *tuiModel) int {
-	return max(0, len(wrappedTUIScanLogs(view))-tuiScanLogViewportHeight(view))
+	return maximumOffset(len(wrappedTUIScanLogs(view)), tuiScanLogViewportHeight(view))
 }
 
 func scanApplicationDetailLines(application model.Application, state model.ManagedStatus, width int) ([]tuiDetailLine, int) {

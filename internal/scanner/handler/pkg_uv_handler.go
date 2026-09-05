@@ -159,19 +159,7 @@ func parseUVTools(output string) ([]uvTool, bool) {
 }
 
 func (h *UVHandler) manager(configured []model.Application) string {
-	if path, err := h.lookPath("uv"); err == nil {
-		return path
-	}
-	for _, app := range configured {
-		if !strings.EqualFold(app.ID, "uv") && !strings.EqualFold(app.Name, "uv") {
-			continue
-		}
-		path := expandConfiguredPath(app.InstallPath, h.homeDir)
-		if info, err := h.stat(path); err == nil && !info.IsDir() {
-			return path
-		}
-	}
-	return ""
+	return managerPath("uv", configured, h.lookPath, h.stat, h.homeDir)
 }
 
 func (h *UVHandler) metadata(ctx context.Context, toolDirectory, name string, request Request) packageMetadata {

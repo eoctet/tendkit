@@ -26,7 +26,7 @@ func NewRuby(r Runner) *RubyHandler {
 func (*RubyHandler) Domain() Domain { return Ruby }
 
 func (h *RubyHandler) Scan(ctx context.Context, request Request) Result {
-	ruby := h.manager("ruby", request.Configured, "ruby", "Ruby")
+	ruby := h.manager(request.Configured)
 	if ruby == "" {
 		return Result{Complete: false, Err: &PackageManagerUnavailableError{Manager: "ruby or RubyGems"}}
 	}
@@ -131,26 +131,8 @@ type rubyGem struct {
 	Bindir          string              `json:"bindir"`
 }
 
-func (h *RubyHandler) manager(binary string, configured []model.Application, names ...string) string {
-	if path, err := h.lookPath(binary); err == nil && filepath.IsAbs(path) {
-		return path
-	}
-	wanted := make(map[string]bool, len(names))
-	for _, name := range names {
-		wanted[strings.ToLower(name)] = true
-	}
-	for _, app := range configured {
-		if !wanted[strings.ToLower(app.ID)] && !wanted[strings.ToLower(app.Name)] {
-			continue
-		}
-		path := expandConfiguredPath(app.InstallPath, h.homeDir)
-		if filepath.IsAbs(path) {
-			if info, err := h.stat(path); err == nil && !info.IsDir() {
-				return path
-			}
-		}
-	}
-	return ""
+func (h *RubyHandler) manager(configured []model.Application) string {
+	return managerPath("ruby", configured, h.lookPath, h.stat, h.homeDir)
 }
 
 func rubyGemListCommand(ruby string) string {

@@ -51,7 +51,7 @@ func (h *HomebrewCaskHandler) Scan(ctx context.Context, request Request) Result 
 	reportPackageProgress(request, model.ScanStagePackageList, "Homebrew cask")
 	r, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" list --cask --versions --json", nil)
 	if err != nil || r.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError(ecosystem, err, r.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, err)}
 	}
 	var inventory homebrewCaskInventory
 	if err := json.Unmarshal([]byte(r.Stdout), &inventory); err != nil || inventory.Casks == nil {
@@ -59,7 +59,7 @@ func (h *HomebrewCaskHandler) Scan(ctx context.Context, request Request) Result 
 	}
 	caskroomResult, caskroomErr := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" --caskroom", nil)
 	if caskroomErr != nil || caskroomResult.ExitCode != 0 {
-		return Result{Complete: false, Err: inventoryError(ecosystem, caskroomErr, caskroomResult.ExitCode)}
+		return Result{Complete: false, Err: inventoryError(ecosystem, caskroomErr)}
 	}
 	caskroom, pathErr := singleHomebrewPath(caskroomResult.Stdout)
 	if pathErr != nil {
@@ -156,7 +156,7 @@ func (h *HomebrewFormulaHandler) formulaInventory(ctx context.Context, brew stri
 	ecosystem := string(h.Domain())
 	result, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" list --formula --versions --json", nil)
 	if err != nil || result.ExitCode != 0 {
-		return nil, "", inventoryError(ecosystem, err, result.ExitCode)
+		return nil, "", inventoryError(ecosystem, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, "", err
@@ -167,7 +167,7 @@ func (h *HomebrewFormulaHandler) formulaInventory(ctx context.Context, brew stri
 	}
 	cellarResult, err := h.runner.Run(ctx, runtimeutil.QuoteShell(brew)+" --cellar", nil)
 	if err != nil || cellarResult.ExitCode != 0 {
-		return nil, "", inventoryError(ecosystem, err, cellarResult.ExitCode)
+		return nil, "", inventoryError(ecosystem, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, "", err

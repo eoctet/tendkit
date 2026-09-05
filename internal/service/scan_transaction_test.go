@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"os"
 
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"context"
 	"sync"
+	"time"
 
 	"runtime"
 
@@ -18,8 +20,47 @@ import (
 	providerpkg "github.com/eoctet/tendkit/internal/updater/provider"
 
 	"errors"
+	logutil "github.com/eoctet/tendkit/pkg/logger"
 	runtimeutil "github.com/eoctet/tendkit/pkg/runtime"
 )
+
+func TestLogScanFailureContract(t *testing.T) {
+	for _, test := range []struct {
+		name, subject, event, status, message, level string
+		cancelled                                    bool
+	}{
+		{"full-failure", "", "scan_failed", model.StatusFailed, "scan operation failed", "ERROR", false},
+		{"full-cancelled", "", "scan_cancelled", model.StatusCancelled, "scan operation cancelled", "WARN", true},
+		{"target-failure", "app-id", "scan_failed", model.StatusFailed, "scan operation failed", "ERROR", false},
+		{"target-cancelled", "app-id", "scan_cancelled", model.StatusCancelled, "scan operation cancelled", "WARN", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			log, err := logutil.NewLogger(directory)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			if test.cancelled {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			logScanFailure(log, ctx, time.Now().Add(-time.Second), test.subject, errors.New("failure detail"))
+			data, err := os.ReadFile(filepath.Join(directory, "run.log"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var entry logutil.LogEntry
+			if err := json.Unmarshal(data, &entry); err != nil {
+				t.Fatal(err)
+			}
+			if entry.Level != test.level || entry.Event != test.event || entry.Operation != "scan" || entry.Status != test.status || entry.Message != test.message || entry.Detail != "failure detail" || entry.AppID != test.subject || entry.ResultCount != 0 || entry.DurationMS <= 0 || entry.DurationMS > 10_000 {
+				t.Fatalf("entry = %#v", entry)
+			}
+		})
+	}
+}
 
 func TestServiceScanTransaction(t *testing.T) {
 	t.Run("preview-scan-persists-existing-state-without-persisting-candidates", func(t *testing.T) {

@@ -21,6 +21,10 @@ import (
 	"github.com/eoctet/tendkit/pkg/i18n"
 )
 
+func decodeTUIKeys(data []byte) []string {
+	return (&tuiInputDecoder{}).decode(data)
+}
+
 // sampleTUIView is the shared baseline for user-input and page-flow scenarios.
 func sampleTUIView() tuiModel {
 	trueValue := true

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -670,10 +671,6 @@ func decodeTUICSI(data []byte) (key string, size int, complete bool) {
 	return "", 0, true
 }
 
-func decodeTUIKeys(data []byte) []string {
-	return (&tuiInputDecoder{}).decode(data)
-}
-
 func handleTUIEvent(parent context.Context, view *tuiModel, event tuiEvent, actions TUIActions, events chan<- tuiEvent) bool {
 	switch event.eventType {
 	case tuiEventInputError:
@@ -697,7 +694,7 @@ func handleTUIEvent(parent context.Context, view *tuiModel, event tuiEvent, acti
 		}
 	case tuiEventAppStart:
 		view.queue[event.result.AppID] = event.result
-		if !containsString(view.queueOrder, event.result.AppID) {
+		if !slices.Contains(view.queueOrder, event.result.AppID) {
 			view.queueOrder = append(view.queueOrder, event.result.AppID)
 		}
 		view.rightQueue = true
@@ -705,14 +702,14 @@ func handleTUIEvent(parent context.Context, view *tuiModel, event tuiEvent, acti
 		view.appendStructuredLog(LogDebug, tuiResultOperation(event.result), event.result.Name, i18n.T("tui.log.started"))
 	case tuiEventUpdateStart:
 		view.queue[event.result.AppID] = event.result
-		if !containsString(view.queueOrder, event.result.AppID) {
+		if !slices.Contains(view.queueOrder, event.result.AppID) {
 			view.queueOrder = append(view.queueOrder, event.result.AppID)
 		}
 		view.rightQueue = true
 		view.detailFocus = false
 	case tuiEventDownloadStart:
 		view.queue[event.result.AppID] = event.result
-		if !containsString(view.queueOrder, event.result.AppID) {
+		if !slices.Contains(view.queueOrder, event.result.AppID) {
 			view.queueOrder = append(view.queueOrder, event.result.AppID)
 		}
 		view.rightQueue = true
@@ -835,7 +832,7 @@ func handleTUIKey(parent context.Context, view *tuiModel, key string, actions TU
 		return false
 	}
 	if view.scanPartial {
-		handleScanPartialKey(view, key, actions)
+		handleScanPartialKey(view, key)
 		return false
 	}
 	if view.confirm {
@@ -1308,12 +1305,7 @@ func setTUIQuickSearchSelection(view *tuiModel, selected, scroll *int, target in
 		return
 	}
 	*selected = max(0, min(len(apps)-1, target))
-	visible := max(1, tuiApplicationListViewportHeight(view))
-	if *selected < *scroll {
-		*scroll = *selected
-	} else if *selected >= *scroll+visible {
-		*scroll = *selected - visible + 1
-	}
+	*scroll = revealSelection(*selected, *scroll, max(1, tuiApplicationListViewportHeight(view)))
 	if view.page == tuiScan {
 		view.scanDetail = 0
 	}
@@ -1413,11 +1405,11 @@ func tuiResultOperation(result model.Result) string {
 }
 
 func scrollTUILogs(view *tuiModel, delta int) {
-	view.logOffset = max(0, min(tuiMaxLogOffset(view), view.logOffset+delta))
+	view.logOffset = boundedOffset(view.logOffset, delta, tuiMaxLogOffset(view))
 }
 
 func scrollTUIDetails(view *tuiModel, delta int) {
-	view.detailOffset = max(0, min(tuiMaxDetailOffset(view), view.detailOffset+delta))
+	view.detailOffset = boundedOffset(view.detailOffset, delta, tuiMaxDetailOffset(view))
 }
 
 func truncateTUILogLine(value string) string {
@@ -1452,13 +1444,4 @@ func (view *tuiModel) expireMessage(now time.Time) bool {
 
 func cloneConfig(catalog model.Config) model.Config {
 	return model.CloneConfig(catalog)
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }
