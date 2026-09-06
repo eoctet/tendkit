@@ -35,9 +35,14 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+      - name: Check golangci-lint configuration
+        run: golangci-lint config verify
+      - name: Lint
+        run: golangci-lint run ./...
       - run: go test ./... -count=1
       - run: go test -race ./internal/ui/... -count=1
-      - run: go vet ./...
       - run: go build ./...
 
   pr:

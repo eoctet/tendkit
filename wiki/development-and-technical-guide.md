@@ -35,10 +35,20 @@ go test ./...
 go build ./...
 ```
 
-The full quality script uses pinned versions of `staticcheck`, `govulncheck`, and `gosec`. It never installs or upgrades tools automatically; when a dependency is missing, it reports the required version and installation command.
+The quality script pins `golangci-lint`, `govulncheck`, and `gosec`. It prints install commands for missing tools without installing or upgrading them.
 
 ```bash
 scripts/verify-go-quality.sh
+```
+
+Golangci-lint `v2.13.2` checks source and tests using [`.golangci.yml`](../.golangci.yml), running `govet`, `staticcheck`, `unused`, and `ineffassign`. Staticcheck matches standalone v0.8.1 defaults. Security scans still use `govulncheck` and standalone `gosec`.
+
+The four-platform CI validates the configuration and runs lint before tests. Failures block the downstream `pr` job. Run locally:
+
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+golangci-lint config verify
+golangci-lint run ./...
 ```
 
 ## 3. Technology boundaries
@@ -196,7 +206,7 @@ Run focused tests while iterating. Before opening a pull request, run at least:
 ```bash
 gofmt -w <changed-go-files>
 go test ./...
-go vet ./...
+golangci-lint run ./...
 go build ./...
 git diff --check
 ```
@@ -211,7 +221,7 @@ If a platform or unavailable tool prevents a check, record the exact command, en
 
 Repository automation uses three layers:
 
-- [Test](../.github/workflows/test.yml) validates pull requests and pushes to `main` with focused and full tests, race checks for the TUI, `go vet`, builds, and a release snapshot.
+- [Test](../.github/workflows/test.yml): checks pull requests and pushes to `main` with focused and full tests, TUI race checks, lint, builds, and a release snapshot.
 - [Nightly](../.github/workflows/nightly.yml) adds the full race suite and repeated PTY/TUI platform tests.
 - [Release](../.github/workflows/release.yml) accepts only signed, annotated `v`-prefixed SemVer tags that belong to `main` and have a successful associated pull request check; it creates and verifies a Draft release before publishing it.
 

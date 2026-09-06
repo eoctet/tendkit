@@ -21,7 +21,7 @@
 
 - [ ] 聚焦测试
 - [ ] `go test ./...`
-- [ ] `go vet ./...`
+- [ ] `golangci-lint run ./...`
 - [ ] `go build ./...`
 - [ ] `git diff --check`
 - [ ] `scripts/verify-go-quality.sh`（已安装固定版本工具时）

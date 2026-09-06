@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-readonly STATICCHECK_VERSION="v0.8.1"
+readonly GOLANGCI_LINT_VERSION="v2.13.2"
 readonly GOVULNCHECK_VERSION="v1.7.0"
 readonly GOSEC_VERSION="v2.29.0"
 
@@ -26,7 +26,7 @@ require_command() {
 require_command go
 require_command git
 require_command python3
-require_command staticcheck "go install honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
+require_command golangci-lint "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
 require_command govulncheck "go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 require_command gosec "GOPROXY=direct go install github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
 
@@ -49,7 +49,7 @@ require_module_version() {
 	exit 1
 }
 
-require_module_version staticcheck honnef.co/go/tools "$STATICCHECK_VERSION" "go install honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}"
+require_module_version golangci-lint github.com/golangci/golangci-lint/v2 "$GOLANGCI_LINT_VERSION" "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
 require_module_version govulncheck golang.org/x/vuln "$GOVULNCHECK_VERSION" "go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 require_module_version gosec github.com/securego/gosec/v2 "$GOSEC_VERSION" "GOPROXY=direct go install github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
 
@@ -59,11 +59,11 @@ if [[ -n "$unformatted" ]]; then
 	exit 1
 fi
 
+golangci-lint config verify
+golangci-lint run ./...
 go test ./...
 go test -race ./...
-go vet ./...
 go build ./...
-staticcheck ./...
 govulncheck ./...
 gosec -quiet ./...
 

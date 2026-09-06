@@ -23,7 +23,7 @@
 - Python 3，用于仓库 JSON 检查
 - macOS 或受支持的 Linux 环境；macOS 覆盖完整的平台、Application Bundle 和 PTY 测试面，Linux 支持非 macOS 实现与测试
 
-[`scripts/verify-go-quality.sh`](scripts/verify-go-quality.sh) 列出了可选质量工具及固定版本：`staticcheck`、`govulncheck` 和 `gosec`。缺失时脚本会显示安装命令，但不会自动安装或升级工具。
+可选质量工具为 `golangci-lint`、`govulncheck` 和 `gosec`，固定版本见[质量脚本](scripts/verify-go-quality.sh)。缺失时仅提示安装命令，不自动安装或升级。
 
 ```bash
 git clone https://github.com/eoctet/tendkit.git
@@ -79,7 +79,7 @@ go test ./internal/config -run TestName -count=1
 ```bash
 gofmt -w <changed-go-files>
 go test ./...
-go vet ./...
+golangci-lint run ./...
 go build ./...
 git diff --check
 ```
@@ -90,9 +90,15 @@ git diff --check
 scripts/verify-go-quality.sh
 ```
 
-完整检查包括格式校验、单元与集成测试、竞态检测、`go vet`、构建、静态分析、漏洞与安全扫描、JSON 校验和 Git 空白检查。若平台或工具导致检查无法运行，请在 Pull Request 中记录准确命令、失败、环境和未覆盖风险；未运行的检查不得表述为通过。
+完整检查涵盖格式、测试、竞态、构建、静态分析、安全扫描、JSON 和 Git 空白检查。检查受阻时，在 Pull Request 中记录命令、原因、环境和未覆盖风险，不得标记为通过。
 
-仓库自动化分为三层。[Test](.github/workflows/test.yml) 对 Pull Request 和 `main` push 运行聚焦与全量测试、TUI 竞态检查、`go vet`、构建和发布快照；[Nightly](.github/workflows/nightly.yml) 增加全量竞态检测及重复 PTY/TUI 平台测试；[Release](.github/workflows/release.yml) 只接受属于 `main`、关联 Pull Request 检查通过且带 `v` 前缀的签名 annotated SemVer tag，并在发布前创建和验证 Draft Release。这些 workflow 不能替代 Pull Request 所需的聚焦本地验证证据。
+自动化分为三层：
+
+- [Test](.github/workflows/test.yml)：检查 Pull Request 和 `main` push，运行聚焦与全量测试、TUI 竞态检查、lint、构建和发布快照。
+- [Nightly](.github/workflows/nightly.yml)：增加全量竞态检测及重复 PTY/TUI 平台测试。
+- [Release](.github/workflows/release.yml)：仅接受属于 `main`、关联 PR 检查通过的签名 annotated SemVer tag（`v` 前缀），先创建并验证 Draft Release，再发布。
+
+CI 不能替代 PR 所需的聚焦本地验证。
 
 ## Commit 与 Pull Request
 

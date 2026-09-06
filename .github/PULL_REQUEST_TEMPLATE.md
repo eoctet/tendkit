@@ -23,7 +23,7 @@ Do not disclose an undisclosed vulnerability in a pull request; follow SECURITY.
 
 - [ ] Focused tests
 - [ ] `go test ./...`
-- [ ] `go vet ./...`
+- [ ] `golangci-lint run ./...`
 - [ ] `go build ./...`
 - [ ] `git diff --check`
 - [ ] `scripts/verify-go-quality.sh` (when pinned tools are available)

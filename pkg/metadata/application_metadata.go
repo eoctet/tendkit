@@ -235,7 +235,7 @@ func FindSparkleCLI() (string, error) {
 
 func ReadGoComponentMetadata(ctx context.Context, runner CommandRunner, manager, binary string, environment map[string]string) (GoComponentMetadata, error) {
 	if runner == nil || strings.TrimSpace(manager) == "" || strings.TrimSpace(binary) == "" {
-		//lint:ignore ST1005 Go is a product name and must retain its capitalization.
+		//nolint:staticcheck // ST1005: Go is a product name and must retain its capitalization.
 		return GoComponentMetadata{}, errors.New("Go manager and component path are required")
 	}
 	result, err := runner.Run(ctx, shellCommand(manager, "version", "-m", binary), environment)
@@ -243,7 +243,7 @@ func ReadGoComponentMetadata(ctx context.Context, runner CommandRunner, manager,
 		return GoComponentMetadata{}, err
 	}
 	if result.ExitCode != 0 {
-		//lint:ignore ST1005 Go is a product name and must retain its capitalization.
+		//nolint:staticcheck // ST1005: Go is a product name and must retain its capitalization.
 		return GoComponentMetadata{}, fmt.Errorf("Go metadata command exited with code %d", result.ExitCode)
 	}
 	return ParseGoComponentMetadata(result.Stdout)
@@ -262,7 +262,7 @@ func ParseGoComponentMetadata(output string) (GoComponentMetadata, error) {
 		}
 	}
 	if metadata.Command == "" || metadata.Module == "" || metadata.Version == "" {
-		//lint:ignore ST1005 Go is a product name and must retain its capitalization.
+		//nolint:staticcheck // ST1005: Go is a product name and must retain its capitalization.
 		return GoComponentMetadata{}, errors.New("Go module metadata is unavailable")
 	}
 	return metadata, nil
@@ -303,7 +303,7 @@ func ReadPackageVersion(ctx context.Context, runner CommandRunner, target Packag
 				return version.Normalize(item.Version), nil
 			}
 		}
-		//lint:ignore ST1005 Node.js is a product name and must retain its capitalization.
+		//nolint:staticcheck // ST1005: Node.js is a product name and must retain its capitalization.
 		return "", errors.New("Node.js package is absent from metadata")
 	case PackageGo, PackageUV:
 		return version.Extract(result.Combined())
@@ -327,7 +327,7 @@ func PackageVersionCommand(target PackageTarget) (string, error) {
 		return shellCommand(target.Manager, "list", "--global", "--depth=0", "--json", target.Name), nil
 	case PackageGo:
 		if strings.TrimSpace(target.InstallPath) == "" {
-			//lint:ignore ST1005 Go is a product name and must retain its capitalization.
+			//nolint:staticcheck // ST1005: Go is a product name and must retain its capitalization.
 			return "", errors.New("Go component path is required")
 		}
 		return shellCommand(target.Manager, "version", "-m", target.InstallPath) + ` | awk '$1 == "mod" && !found {print $3; found=1}'`, nil

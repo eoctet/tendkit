@@ -35,10 +35,20 @@ go test ./...
 go build ./...
 ```
 
-完整质量脚本使用固定版本的 `staticcheck`、`govulncheck` 和 `gosec`。脚本不会自动安装或升级工具；缺少依赖时会显示所需版本和安装方式。
+质量脚本使用固定版本的 `golangci-lint`、`govulncheck` 和 `gosec`。缺失时仅提示安装命令，不自动安装或升级。
 
 ```bash
 scripts/verify-go-quality.sh
+```
+
+golangci-lint `v2.13.2` 按 [`.golangci.yml`](../.golangci.yml) 检查源码和测试，统一运行 `govet`、`staticcheck`、`unused`、`ineffassign`。Staticcheck 对齐独立 v0.8.1 的默认规则。安全扫描仍由 `govulncheck` 和独立 `gosec` 执行。
+
+四平台 CI 在测试前校验配置并执行 lint，失败会阻止下游 `pr` job。本地运行：
+
+```bash
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+golangci-lint config verify
+golangci-lint run ./...
 ```
 
 ## 3. 技术栈边界
@@ -196,7 +206,7 @@ go test ./internal/config -run TestName -count=1
 ```bash
 gofmt -w <changed-go-files>
 go test ./...
-go vet ./...
+golangci-lint run ./...
 go build ./...
 git diff --check
 ```
@@ -211,7 +221,7 @@ scripts/verify-go-quality.sh
 
 仓库自动化分为三层：
 
-- [Test](../.github/workflows/test.yml) 对 Pull Request 和 `main` push 运行聚焦与全量测试、TUI 竞态检查、`go vet`、构建和发布快照。
+- [Test](../.github/workflows/test.yml)：检查 Pull Request 和 `main` push，运行聚焦与全量测试、TUI 竞态检查、lint、构建和发布快照。
 - [Nightly](../.github/workflows/nightly.yml) 增加全量竞态检测及重复 PTY/TUI 平台测试。
 - [Release](../.github/workflows/release.yml) 只接受属于 `main`、关联 Pull Request 检查通过且带 `v` 前缀的签名 annotated SemVer tag，并在发布前创建和验证 Draft Release。
 

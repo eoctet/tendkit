@@ -23,7 +23,7 @@ Required tools:
 - Python 3 for repository JSON checks
 - macOS or a supported Linux environment; macOS provides the complete platform, Application Bundle, and PTY test surface, while Linux supports the non-macOS implementation and tests
 
-Optional quality tools and their pinned versions are listed in [`scripts/verify-go-quality.sh`](scripts/verify-go-quality.sh): `staticcheck`, `govulncheck`, and `gosec`. The script reports installation commands if they are missing; it does not install or upgrade tools automatically.
+Optional quality tools are `golangci-lint`, `govulncheck`, and `gosec`. Versions are pinned in the [quality script](scripts/verify-go-quality.sh), which prints install commands for missing tools without installing or upgrading them.
 
 ```bash
 git clone https://github.com/eoctet/tendkit.git
@@ -79,7 +79,7 @@ Before opening a pull request, run at least:
 ```bash
 gofmt -w <changed-go-files>
 go test ./...
-go vet ./...
+golangci-lint run ./...
 go build ./...
 git diff --check
 ```
@@ -90,9 +90,15 @@ When the pinned quality tools are available, run the complete repository check:
 scripts/verify-go-quality.sh
 ```
 
-The complete check includes formatting verification, unit and integration tests, the race detector, `go vet`, builds, static analysis, vulnerability and security scanning, JSON validation, and Git whitespace checks. If a platform or tool prevents a check, describe the exact command, failure, environment, and remaining risk in the pull request; do not report an unrun check as passing.
+The full check covers formatting, tests, races, builds, static analysis, security scans, JSON, and Git whitespace. For blocked checks, record the command, cause, environment, and remaining risk in the pull request; do not mark them as passing.
 
-Repository automation uses three layers. [Test](.github/workflows/test.yml) validates pull requests and pushes to `main` with focused and full tests, race checks for the TUI, `go vet`, builds, and a release snapshot. [Nightly](.github/workflows/nightly.yml) adds the full race suite and repeated PTY/TUI platform tests. [Release](.github/workflows/release.yml) accepts only signed, annotated `v`-prefixed SemVer tags that belong to `main` and have a successful associated pull request check; it creates and verifies a Draft release before publishing it. These workflows do not replace the focused local evidence required in a pull request.
+Automation has three layers:
+
+- [Test](.github/workflows/test.yml): checks pull requests and pushes to `main` with focused and full tests, TUI race checks, lint, builds, and a release snapshot.
+- [Nightly](.github/workflows/nightly.yml): adds the full race suite and repeated PTY/TUI platform tests.
+- [Release](.github/workflows/release.yml): accepts only signed, annotated SemVer tags with a `v` prefix that belong to `main` and have a passing associated PR check. It creates and verifies a Draft release before publishing.
+
+CI does not replace the focused local verification required for a PR.
 
 ## Commits and pull requests
 
