@@ -459,14 +459,7 @@ func scanCandidateConfigRowsFor(view *tuiModel, id string) []configRow {
 		return nil
 	}
 	catalog := model.Config{Apps: []model.Application{application}}
-	rows := applicationConfigRows(&catalog, application.ID)
-	for index := range rows {
-		if rows[index].field == "environment" {
-			rows[index].rowType = configRowString
-			rows[index].value = formatTUIEnvironment(application.Environment)
-		}
-	}
-	return rows
+	return applicationConfigRows(&catalog, application.ID)
 }
 
 func applyScanCandidateConfigEdit(view *tuiModel, value string) error {

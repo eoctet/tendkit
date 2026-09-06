@@ -10,7 +10,15 @@ import (
 )
 
 func DetectCapabilities(implementation any) Capabilities {
-	return Capabilities{currentCapability(implementation), latestCapability(implementation), updateCapability(implementation), downloadCapability(implementation), installCapability(implementation), checksumCapability(implementation), artifactCapability(implementation)}
+	return Capabilities{
+		Current:  currentCapability(implementation),
+		Latest:   latestCapability(implementation),
+		Update:   updateCapability(implementation),
+		Download: downloadCapability(implementation),
+		Install:  installCapability(implementation),
+		Checksum: checksumCapability(implementation),
+		Artifact: artifactCapability(implementation),
+	}
 }
 func currentCapability(v any) CurrentVersioner  { result, _ := v.(CurrentVersioner); return result }
 func latestCapability(v any) LatestVersioner    { result, _ := v.(LatestVersioner); return result }
@@ -98,7 +106,17 @@ func RegisterBuiltins(registry *Registry, source *HTTPSource, endpoints map[stri
 		name           string
 		implementation any
 	}{
-		{string(model.ProviderGitHubRelease), GitHubReleaseProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubRelease)]}}, {string(model.ProviderGitHubTag), GitHubTagProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubTag)]}}, {string(model.ProviderNPM), NPMProvider{Source: source, Endpoint: endpoints[string(model.ProviderNPM)]}}, {string(model.ProviderPyPI), PyPIProvider{Source: source, Endpoint: endpoints[string(model.ProviderPyPI)]}}, {string(model.ProviderUV), UVProvider{Runner: runner}}, {string(model.ProviderJetBrains), JetBrainsProvider{Source: source, Endpoint: endpoints[string(model.ProviderJetBrains)]}}, {string(model.ProviderGo), GoProvider{Source: source, Endpoint: endpoints[string(model.ProviderGo)], Runner: runner}}, {string(model.ProviderNodeLTS), NodeLTSProvider{Source: source, Endpoint: endpoints[string(model.ProviderNodeLTS)]}}, {string(model.ProviderSparkle), SparkleProvider{Source: source, Runner: runner}}, {string(model.ProviderHomebrew), HomebrewProvider{Runner: runner}}, {string(model.ProviderCargo), CargoProvider{Runner: runner}},
+		{string(model.ProviderGitHubRelease), GitHubReleaseProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubRelease)]}},
+		{string(model.ProviderGitHubTag), GitHubTagProvider{Source: source, Endpoint: endpoints[string(model.ProviderGitHubTag)]}},
+		{string(model.ProviderNPM), NPMProvider{Source: source, Endpoint: endpoints[string(model.ProviderNPM)]}},
+		{string(model.ProviderPyPI), PyPIProvider{Source: source, Endpoint: endpoints[string(model.ProviderPyPI)]}},
+		{string(model.ProviderUV), UVProvider{Runner: runner}},
+		{string(model.ProviderJetBrains), JetBrainsProvider{Source: source, Endpoint: endpoints[string(model.ProviderJetBrains)]}},
+		{string(model.ProviderGo), GoProvider{Source: source, Endpoint: endpoints[string(model.ProviderGo)], Runner: runner}},
+		{string(model.ProviderNodeLTS), NodeLTSProvider{Source: source, Endpoint: endpoints[string(model.ProviderNodeLTS)]}},
+		{string(model.ProviderSparkle), SparkleProvider{Source: source, Runner: runner}},
+		{string(model.ProviderHomebrew), HomebrewProvider{Runner: runner}},
+		{string(model.ProviderCargo), CargoProvider{Runner: runner}},
 	}
 	for _, builtin := range builtins {
 		capabilities := DetectCapabilities(builtin.implementation)

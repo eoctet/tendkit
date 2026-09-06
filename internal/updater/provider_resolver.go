@@ -141,10 +141,7 @@ func (c *providerResolver) current(ctx context.Context, app model.Application, f
 	}
 	capabilities, ok := c.registry.Resolve(string(app.Provider.Type))
 	if !ok {
-		if app.Provider.Type != model.ProviderDefault {
-			return currentResolution{}, errors.New(i18n.T("provider.unsupported", app.Provider.Type))
-		}
-		capabilities = providerpkg.Capabilities{}
+		return currentResolution{}, errors.New(i18n.T("provider.unsupported", app.Provider.Type))
 	}
 	var currentErr error
 	if capabilities.Current != nil {
